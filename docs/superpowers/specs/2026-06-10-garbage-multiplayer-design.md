@@ -80,8 +80,9 @@ résolution) :
 - **Chaîne** (`chain_count >= 2`) → `width = 6`, `height = min(chain_count - 1, 12)`,
   `power = width * height`
 
-Si `power > 0`, `Board` émet `signal garbage_sent(power: int)`. `match.gd` route ce signal
-vers `receive_garbage(power)` du `Board` adverse.
+Au lieu d'émettre `garbage_sent` directement, `_resolve_matches()` appelle une méthode interne
+`_send_garbage(power)` (voir ci-dessous), qui gère le counter avant d'éventuellement émettre
+le signal.
 
 ## File d'attente, télégraphe & counter
 
@@ -93,17 +94,27 @@ const TELEGRAPH_DURATION := 2.0
 const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1  # 11, marge de sécurité
 ```
 
-### Réception (`receive_garbage(power)`)
+Deux opérations distinctes :
 
-1. Si `pending_garbage` n'est pas vide : `power` annule en priorité (FIFO, le plus ancien
-   d'abord) la `power` des items en attente — réduction ou suppression des items dont la
-   power tombe à 0. `power` est décrémenté du montant annulé à chaque étape.
+### Envoi avec counter (`_send_garbage(power)`, interne)
+
+Appelée quand **ce** board produit `power` via son propre combo/chaîne :
+
+1. `power` annule en priorité (FIFO, le plus ancien d'abord) la `power` des items de **son
+   propre** `pending_garbage` (le garbage que l'adversaire est en train de nous envoyer) —
+   réduction ou suppression des items dont la power tombe à 0. `power` est décrémenté du
+   montant annulé à chaque étape.
 2. S'il reste de la `power` après avoir vidé toute la file (ou si la file était déjà vide) :
-   un nouvel item `{power: power_restant, telegraph_time: TELEGRAPH_DURATION, columns: ...}`
-   est ajouté à la file de **l'adversaire** (donc `garbage_sent` est de nouveau émis vers
-   `match.gd`, qui route vers l'autre board — contre-attaque).
-3. Si `power` a été entièrement absorbé par l'annulation, rien de plus ne se passe (le garbage
-   entrant a été contré, totalement ou partiellement).
+   `garbage_sent.emit(power_restant)` est émis — `match.gd` route ce signal vers
+   `receive_garbage(power_restant)` du board **adverse**.
+3. Si `power` a été entièrement absorbé par l'annulation, rien n'est émis (le garbage que
+   l'adversaire nous envoyait a été contré, totalement ou partiellement).
+
+### Réception (`receive_garbage(power)`, public)
+
+Appelée par `match.gd` quand **l'adversaire** nous envoie du garbage (via son propre
+`_send_garbage`). Ajoute simplement un nouvel item
+`{power: power, telegraph_time: TELEGRAPH_DURATION, columns: ...}` à `pending_garbage`.
 
 `columns` est tiré aléatoirement à la création de l'item : `c0 = randi() % (GRID_WIDTH - width + 1)`
 pour la largeur du moment (`width = min(power, 6)`). Cette plage sert pour l'indicateur visuel ;
