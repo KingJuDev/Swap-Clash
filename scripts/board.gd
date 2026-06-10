@@ -220,6 +220,14 @@ func _score_for(combo_size: int, chain: int) -> int:
 		base_score += (combo_size - 3) * 20
 	return base_score * chain
 
+func _garbage_power_for(combo_size: int, chain: int) -> int:
+	if chain >= 2:
+		var height: int = min(chain - 1, 12)
+		return 6 * height
+	if combo_size >= 4:
+		return min(combo_size - 1, 6)
+	return 0
+
 func _generate_row(row_index: int) -> Array:
 	var row_colors := []
 	for col in range(GRID_WIDTH):
