@@ -113,14 +113,25 @@ Appelée quand **ce** board produit `power` via son propre combo/chaîne :
 ### Réception (`receive_garbage(power)`, public)
 
 Appelée par `match.gd` quand **l'adversaire** nous envoie du garbage (via son propre
-`_send_garbage`). Ajoute simplement un nouvel item
-`{power: power, telegraph_time: TELEGRAPH_DURATION, columns: ...}` à `pending_garbage`.
+`_send_garbage`). Calcule la forme initiale via `_garbage_shape_for_power(power)` (voir
+ci-dessous), tire une colonne de départ aléatoire `c0 = randi() % (GRID_WIDTH - shape.width + 1)`,
+et ajoute `{power: power, telegraph_time: TELEGRAPH_DURATION, columns: Vector2i(c0, shape.width)}`
+à `pending_garbage`. `columns` sert à l'indicateur visuel ; la position/largeur réelles de
+livraison sont recalculées à partir de la `power` (éventuellement réduite par un counter) au
+moment de la livraison.
 
-`columns` est tiré aléatoirement à la création de l'item : `c0 = randi() % (GRID_WIDTH - width + 1)`
-pour la largeur du moment (`width = min(power, 6)`). Cette plage sert pour l'indicateur visuel ;
-la largeur réelle de livraison est recalculée à partir de la `power` finale au moment de la
-livraison (voir ci-dessous), donc `columns` peut être réajustée si la largeur change suite à un
-counter partiel.
+### Forme à partir de la power (`_garbage_shape_for_power(power)`)
+
+`GarbageBlock` est toujours un rectangle uniforme `width x height`. Conversion :
+
+- `power <= 0` → `{height: 0, width: 0}` (rien à livrer)
+- `power <= GRID_WIDTH` (6) → `{height: 1, width: power}` — reproduit exactement la table
+  combo (3,4,5,6 → blocs 1 ligne de largeur 3 à 6)
+- `power > GRID_WIDTH` → `{height: min(ceil(power / 6.0), MAX_GARBAGE_HEIGHT), width: 6}` —
+  reproduit exactement la table chaîne (power = 6 * (chain-1) → bloc plein de `chain-1`
+  lignes). Pour des valeurs de `power` non multiples de 6 (cas rares issus d'un reliquat de
+  counter), le rectangle résultant peut représenter légèrement plus de `power` que la valeur
+  exacte — approximation acceptée.
 
 ### Indicateur visuel (télégraphe)
 
@@ -132,21 +143,19 @@ impact.
 ### Livraison
 
 Dans `_process`, chaque item de `pending_garbage` voit son `telegraph_time` décrémenté de
-`delta`. Quand il atteint 0 :
+`delta`. Quand le **premier** item de la file (le plus ancien) atteint 0 :
 
-1. Conversion `power` → forme : `height = ceil(power / 6.0)` (capé à `MAX_GARBAGE_HEIGHT`),
-   les `height - 1` premières lignes ont `width = 6`, la dernière ligne a
-   `width = power - (height - 1) * 6` (ou 6 si `power` est un multiple de 6). Pour simplifier
-   l'implémentation initiale, seule la **première ligne** (la plus basse, celle qui touchera
-   la pile en premier) utilise cette largeur réduite ; les lignes au-dessus sont en 6 de large
-   (forme en "drapeau" plutôt qu'en escalier — acceptable visuellement pour des placeholders).
-2. Si la zone `rows 0..height-1` × `columns` (largeur de la ligne du bas) n'est pas
-   entièrement vide dans `grid`, la livraison est reportée (re-vérifiée chaque frame, l'item
-   reste avec `telegraph_time = 0` jusqu'à ce que la zone se libère).
-3. Sinon : un `GarbageBlock` est instancié à `origin = Vector2i(columns.x, 0)` avec les
-   dimensions calculées, placé dans `grid`, et l'item est retiré de `pending_garbage`. La
-   gravité (appelée juste après, dans le flux normal de `_process`/`_try_swap`) le fait tomber
-   sur la pile existante.
+1. Recalcul de la forme via `_garbage_shape_for_power(item.power)` (la `power` peut avoir été
+   réduite par un counter depuis la mise en file). `c0` est ajusté avec
+   `clampi(item.columns.x, 0, GRID_WIDTH - shape.width)` pour rester dans la grille si la
+   largeur a changé.
+2. Si la zone `rows 0..shape.height-1` × colonnes `c0..c0+shape.width-1` n'est pas entièrement
+   vide dans `grid`, la livraison est reportée (re-vérifiée chaque frame, l'item reste en tête
+   de file jusqu'à ce que la zone se libère).
+3. Sinon : un `GarbageBlock` est instancié à `origin = Vector2i(c0, 0)` avec `shape.width` /
+   `shape.height`, placé dans `grid`, et l'item est retiré de `pending_garbage`. La gravité
+   (appelée juste après, dans le flux normal de `_process`/`_try_swap`) le fait tomber sur la
+   pile existante.
 
 ## Multijoueur local (manettes)
 
