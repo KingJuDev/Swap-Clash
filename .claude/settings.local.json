@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rtk ls *)",
+      "Bash(git init *)",
+      "Bash(rtk git *)",
+      "Bash(mdfind \"kMDItemKind == 'Application'\")",
+      "Bash(/Users/floriojulien/Downloads/Godot.app/Contents/MacOS/Godot --version)",
+      "Bash(defaults read *)"
+    ]
+  }
+}
