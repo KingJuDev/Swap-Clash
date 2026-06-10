@@ -129,6 +129,7 @@ func _try_swap() -> void:
 	is_resolving = true
 	await get_tree().create_timer(SWAP_DURATION).timeout
 	chain_count = 0
+	await _apply_gravity()
 	await _resolve_matches()
 	is_resolving = false
 
