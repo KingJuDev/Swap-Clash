@@ -6,7 +6,12 @@
       "Bash(rtk git *)",
       "Bash(mdfind \"kMDItemKind == 'Application'\")",
       "Bash(/Users/floriojulien/Downloads/Godot.app/Contents/MacOS/Godot --version)",
-      "Bash(defaults read *)"
+      "Bash(defaults read *)",
+      "Bash(/Users/floriojulien/Downloads/Godot.app/Contents/MacOS/Godot --headless --import)",
+      "Bash(rtk grep *)",
+      "Bash(rtk proxy *)",
+      "Bash(rm test_logic.gd)",
+      "Bash(rm -rf .godot)"
     ]
   }
 }

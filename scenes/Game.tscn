@@ -1,0 +1,48 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="PackedScene" path="res://scenes/Board.tscn" id="1"]
+[ext_resource type="Script" path="res://scripts/game.gd" id="2"]
+
+[node name="Game" type="Node2D"]
+script = ExtResource("2")
+
+[node name="Board" parent="." instance=ExtResource("1")]
+position = Vector2(20, 20)
+
+[node name="ScoreLabel" type="Label" parent="."]
+offset_left = 430.0
+offset_top = 30.0
+offset_right = 610.0
+offset_bottom = 70.0
+theme_override_font_sizes/font_size = 24
+text = "Score: 0"
+
+[node name="ChainLabel" type="Label" parent="."]
+offset_left = 430.0
+offset_top = 80.0
+offset_right = 610.0
+offset_bottom = 120.0
+theme_override_font_sizes/font_size = 20
+text = ""
+
+[node name="GameOverPanel" type="ColorRect" parent="."]
+visible = false
+offset_right = 620.0
+offset_bottom = 800.0
+color = Color(0, 0, 0, 0.7)
+
+[node name="GameOverLabel" type="Label" parent="GameOverPanel"]
+offset_left = 160.0
+offset_top = 350.0
+offset_right = 460.0
+offset_bottom = 410.0
+theme_override_font_sizes/font_size = 40
+horizontal_alignment = 1
+text = "GAME OVER"
+
+[node name="RestartButton" type="Button" parent="GameOverPanel"]
+offset_left = 250.0
+offset_top = 450.0
+offset_right = 370.0
+offset_bottom = 500.0
+text = "Rejouer"
