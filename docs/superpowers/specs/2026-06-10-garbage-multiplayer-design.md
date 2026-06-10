@@ -74,8 +74,9 @@ matchs (mais détectées via le check de voisinage du cassage, étape précéden
 À la fin de chaque palier de `_resolve_matches()` (un "palier" = une vague de matchs +
 résolution) :
 
-- **Combo** (`chain_count == 1`, taille du match ≥ 4) → `width = min(taille - 3, 6)`,
-  `height = 1`, `power = width`
+- **Combo** (`chain_count == 1`, taille du match ≥ 4) → `width = min(taille - 1, 6)`,
+  `height = 1`, `power = width` (combo 4 → 3, combo 5 → 4, combo 6 → 5, combo 7+ → 6,
+  conforme à la table confirmée)
 - **Chaîne** (`chain_count >= 2`) → `width = 6`, `height = min(chain_count - 1, 12)`,
   `power = width * height`
 
