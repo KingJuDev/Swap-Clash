@@ -30,6 +30,30 @@ const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1
 
 const JOY_AXIS_DEADZONE := 0.5
 
+@export_enum("gamepad", "keyboard") var input_source: String = "gamepad"
+@export var keyboard_scheme: int = 1
+
+const KEYBOARD_SCHEME_1 := {
+	"left": KEY_A,
+	"right": KEY_D,
+	"up": KEY_W,
+	"down": KEY_S,
+	"swap": KEY_SPACE,
+	"fast_rise": KEY_SHIFT,
+}
+
+const KEYBOARD_SCHEME_2 := {
+	"left": KEY_LEFT,
+	"right": KEY_RIGHT,
+	"up": KEY_UP,
+	"down": KEY_DOWN,
+	"swap": KEY_ENTER,
+	"fast_rise": KEY_CTRL,
+}
+
+func _keyboard_keys() -> Dictionary:
+	return KEYBOARD_SCHEME_2 if keyboard_scheme == 2 else KEYBOARD_SCHEME_1
+
 @onready var cursor_node: ColorRect = $Cursor
 
 # grid[row][col] -> Block or null. (0,0) is the top-left visible cell.
@@ -68,13 +92,13 @@ func _process(delta: float) -> void:
 	_update_garbage_queue(delta)
 	_handle_cursor_movement(delta)
 
-	var swap_pressed := Input.is_joy_button_pressed(input_device, JOY_BUTTON_A)
+	var swap_pressed := _is_swap_pressed()
 	if swap_pressed and not _swap_was_pressed and not is_resolving:
 		_try_swap()
 	_swap_was_pressed = swap_pressed
 
 	if not is_resolving:
-		var rise_speed := RISE_SPEED_FAST if Input.is_joy_button_pressed(input_device, JOY_BUTTON_B) else RISE_SPEED_NORMAL
+		var rise_speed := RISE_SPEED_FAST if _is_fast_rise_pressed() else RISE_SPEED_NORMAL
 		rise_offset += rise_speed * delta
 		while rise_offset >= CELL_SIZE:
 			rise_offset -= CELL_SIZE
@@ -110,7 +134,22 @@ func _handle_cursor_movement(delta: float) -> void:
 		else:
 			_key_held_time[dir_name] = -1.0
 
+func _is_swap_pressed() -> bool:
+	if input_source == "keyboard":
+		var keycode := _keyboard_keys()["swap"] as Key
+		return Input.is_physical_key_pressed(keycode)
+	return Input.is_joy_button_pressed(input_device, JOY_BUTTON_A)
+
+func _is_fast_rise_pressed() -> bool:
+	if input_source == "keyboard":
+		var keycode := _keyboard_keys()["fast_rise"] as Key
+		return Input.is_physical_key_pressed(keycode)
+	return Input.is_joy_button_pressed(input_device, JOY_BUTTON_B)
+
 func _is_direction_pressed(dir_name: String) -> bool:
+	if input_source == "keyboard":
+		var keycode := _keyboard_keys()[dir_name] as Key
+		return Input.is_physical_key_pressed(keycode)
 	match dir_name:
 		"left":
 			return Input.is_joy_button_pressed(input_device, JOY_BUTTON_DPAD_LEFT) or Input.get_joy_axis(input_device, JOY_AXIS_LEFT_X) < -JOY_AXIS_DEADZONE
