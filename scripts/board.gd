@@ -165,22 +165,76 @@ func _resolve_matches() -> void:
 	await _resolve_matches()
 
 func _apply_gravity() -> void:
-	var any_falling := false
-	for col in range(GRID_WIDTH):
-		var write_row := VISIBLE_ROWS - 1
+	var start_pos := {}
+	var any_moved := true
+	while any_moved:
+		any_moved = false
+
+		# Compact normal blocks within each column, segment by segment
+		# (a GarbageBlock cell acts as a solid floor for the segment above it).
+		for col in range(GRID_WIDTH):
+			var write_row := VISIBLE_ROWS - 1
+			for row in range(VISIBLE_ROWS - 1, -1, -1):
+				var cell: Variant = grid[row][col]
+				if cell is GarbageBlock:
+					write_row = row - 1
+					continue
+				if cell != null:
+					if not start_pos.has(cell):
+						start_pos[cell] = cell.grid_pos
+					if write_row != row:
+						grid[write_row][col] = cell
+						grid[row][col] = null
+						cell.grid_pos = Vector2i(col, write_row)
+						any_moved = true
+					write_row -= 1
+
+		# Move garbage blocks down as units, by the smallest empty gap under
+		# any of the columns they cover.
+		var processed := {}
 		for row in range(VISIBLE_ROWS - 1, -1, -1):
-			if grid[row][col] != null:
-				if write_row != row:
-					var b: Variant = grid[row][col]
-					grid[write_row][col] = b
-					grid[row][col] = null
-					b.grid_pos = Vector2i(col, write_row)
-					var dist := write_row - row
-					b.play_fall(_cell_position(col, write_row), FALL_DURATION_PER_CELL * dist)
-					any_falling = true
-				write_row -= 1
+			for col in range(GRID_WIDTH):
+				var cell: Variant = grid[row][col]
+				if cell is GarbageBlock and not processed.has(cell):
+					processed[cell] = true
+					if not start_pos.has(cell):
+						start_pos[cell] = cell.origin
+					var drop := _garbage_drop_distance(cell)
+					if drop > 0:
+						_move_garbage_block(cell, drop)
+						any_moved = true
+
+	var any_falling := false
+	for cell in start_pos.keys():
+		var start: Vector2i = start_pos[cell]
+		var end: Vector2i = cell.grid_pos if cell is Block else cell.origin
+		var dist := end.y - start.y
+		if dist > 0:
+			cell.play_fall(_cell_position(end.x, end.y), FALL_DURATION_PER_CELL * dist)
+			any_falling = true
 	if any_falling:
 		await get_tree().create_timer(FALL_DURATION_PER_CELL * VISIBLE_ROWS).timeout
+
+func _garbage_drop_distance(g: GarbageBlock) -> int:
+	var bottom_row := g.origin.y + g.height - 1
+	var max_drop := VISIBLE_ROWS
+	for col in range(g.origin.x, g.origin.x + g.width):
+		var empty_below := 0
+		var row := bottom_row + 1
+		while row < VISIBLE_ROWS and grid[row][col] == null:
+			empty_below += 1
+			row += 1
+		max_drop = min(max_drop, empty_below)
+	return max(max_drop, 0)
+
+func _move_garbage_block(g: GarbageBlock, drop: int) -> void:
+	for col in range(g.origin.x, g.origin.x + g.width):
+		for row in range(g.origin.y, g.origin.y + g.height):
+			grid[row][col] = null
+	g.origin.y += drop
+	for col in range(g.origin.x, g.origin.x + g.width):
+		for row in range(g.origin.y, g.origin.y + g.height):
+			grid[row][col] = g
 
 func _find_matches() -> Array:
 	var matched := {}
