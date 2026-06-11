@@ -26,6 +26,11 @@ const MOVE_REPEAT_RATE := 0.06
 const TELEGRAPH_DURATION := 2.0
 const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1
 
+const BOARD_FRAME_COLOR := Color(0.3, 0.7, 1.0)
+
+const SHAKE_CHAIN_THRESHOLD := 3
+const SHAKE_COMBO_THRESHOLD := 5
+
 @export var input_device: int = 0
 
 const JOY_AXIS_DEADZONE := 0.5
@@ -71,9 +76,11 @@ var pending_garbage: Array = []
 
 var _swap_was_pressed := false
 var _key_held_time := {}
+var _base_position := Vector2.ZERO
 
 func _ready() -> void:
 	randomize()
+	_base_position = position
 	for row in range(TOTAL_ROWS):
 		var cells := []
 		for col in range(GRID_WIDTH):
@@ -85,6 +92,11 @@ func _ready() -> void:
 		for col in range(GRID_WIDTH):
 			grid[row][col] = _spawn_block(colors[col], row, col)
 	_update_visuals()
+	queue_redraw()
+
+func _draw() -> void:
+	var rect := Rect2(Vector2.ZERO, Vector2(GRID_WIDTH * CELL_SIZE, VISIBLE_ROWS * CELL_SIZE))
+	NeonTheme.draw_glow_rect_outline(self, rect, BOARD_FRAME_COLOR, 4, 3.0)
 
 func _process(delta: float) -> void:
 	if game_over_flag:
@@ -207,6 +219,9 @@ func _resolve_matches() -> void:
 	if chain_count > 1:
 		chain_updated.emit(chain_count)
 
+	if chain_count >= SHAKE_CHAIN_THRESHOLD or combo_size >= SHAKE_COMBO_THRESHOLD:
+		shake()
+
 	var power := _garbage_power_for(combo_size, chain_count)
 	if power > 0:
 		_send_garbage(power)
@@ -298,6 +313,7 @@ func _shatter_garbage_bottom_row(g: GarbageBlock) -> void:
 	var bottom_row := g.origin.y + g.height - 1
 	for col in range(g.origin.x, g.origin.x + g.width):
 		grid[bottom_row][col] = _spawn_block(randi() % NUM_COLORS, bottom_row, col)
+	g.play_shatter_row(g.height - 1, CELL_SIZE)
 	g.height -= 1
 	if g.height <= 0:
 		g.queue_free()
@@ -477,7 +493,17 @@ func _do_rise_step() -> void:
 
 func _trigger_game_over() -> void:
 	game_over_flag = true
+	shake(14.0, 0.4)
 	game_over.emit()
+
+func shake(intensity: float = 8.0, duration: float = 0.25) -> void:
+	var tween := create_tween()
+	tween.tween_method(_apply_shake_offset.bind(intensity), 0.0, 1.0, duration)
+	tween.tween_callback(func(): position = _base_position)
+
+func _apply_shake_offset(t: float, intensity: float) -> void:
+	var amount := intensity * (1.0 - t)
+	position = _base_position + Vector2(randf_range(-amount, amount), randf_range(-amount, amount))
 
 func _spawn_block(color_id: int, row: int, col: int) -> Block:
 	var b := BlockScene.instantiate() as Block

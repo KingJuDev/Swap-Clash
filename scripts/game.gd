@@ -18,11 +18,7 @@ func _on_score_changed(new_score: int) -> void:
 	score_label.text = "Score: %d" % new_score
 
 func _on_chain_updated(chain: int) -> void:
-	var label_text := "Chain x%d!" % chain
-	chain_label.text = label_text
-	await get_tree().create_timer(1.0).timeout
-	if chain_label.text == label_text:
-		chain_label.text = ""
+	NeonTheme.animate_chain_label(chain_label, chain)
 
 func _on_game_over() -> void:
 	game_over_panel.visible = true

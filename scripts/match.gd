@@ -2,10 +2,12 @@ extends Node2D
 
 @onready var board1: Node2D = $Board1
 @onready var board2: Node2D = $Board2
-@onready var score_label1: Label = $ScoreLabel1
-@onready var score_label2: Label = $ScoreLabel2
-@onready var garbage_label1: Label = $GarbageLabel1
-@onready var garbage_label2: Label = $GarbageLabel2
+@onready var score_label1: Label = $ScorePanel1/ScoreLabel1
+@onready var score_label2: Label = $ScorePanel2/ScoreLabel2
+@onready var garbage_label1: Label = $GarbagePanel1/GarbageLabel1
+@onready var garbage_label2: Label = $GarbagePanel2/GarbageLabel2
+@onready var chain_label1: Label = $ChainLabel1
+@onready var chain_label2: Label = $ChainLabel2
 @onready var end_panel: ColorRect = $EndPanel
 @onready var end_label: Label = $EndPanel/EndLabel
 @onready var restart_button: Button = $EndPanel/RestartButton
@@ -22,6 +24,9 @@ func _ready() -> void:
 
 	board1.score_changed.connect(func(s: int): score_label1.text = "Score: %d" % s)
 	board2.score_changed.connect(func(s: int): score_label2.text = "Score: %d" % s)
+
+	board1.chain_updated.connect(func(chain: int): NeonTheme.animate_chain_label(chain_label1, chain))
+	board2.chain_updated.connect(func(chain: int): NeonTheme.animate_chain_label(chain_label2, chain))
 
 	board1.garbage_sent.connect(board2.receive_garbage)
 	board2.garbage_sent.connect(board1.receive_garbage)
