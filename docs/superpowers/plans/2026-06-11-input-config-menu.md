@@ -494,6 +494,8 @@ text = "Démarrer"
 
 - [ ] **Step 3: Écrire `tests/test_setup_menu.gd`**
 
+> Note : ce script `extends SceneTree` ne peut pas utiliser l'identifiant global `GameConfig` directement (limitation confirmée de Godot 4.6.3 : "Identifier not found: GameConfig" en mode `--headless --script` pour les scripts SceneTree, voir Task 1). Utiliser `get_root().get_node("GameConfig")` à la place. Les scripts `Node`/`Node2D` (comme `setup_menu.gd` lui-même) n'ont pas ce problème et peuvent utiliser `GameConfig` directement.
+
 ```gdscript
 extends SceneTree
 
@@ -507,6 +509,7 @@ func _initialize() -> void:
 
 func _process(_delta: float) -> bool:
 	var menu: Variant = _menu
+	var config: Variant = get_root().get_node("GameConfig")
 
 	# Headless: no joypads connected -> only "Clavier" for each player.
 	assert(menu.player1_option.item_count == 1)
@@ -518,8 +521,8 @@ func _process(_delta: float) -> bool:
 
 	# Starting with default selection (Clavier/Clavier) writes to GameConfig.
 	menu._on_start_pressed()
-	assert(GameConfig.player1_source == GameConfig.SOURCE_KEYBOARD)
-	assert(GameConfig.player2_source == GameConfig.SOURCE_KEYBOARD)
+	assert(config.player1_source == config.SOURCE_KEYBOARD)
+	assert(config.player2_source == config.SOURCE_KEYBOARD)
 
 	print("ALL TESTS PASSED")
 	quit()
@@ -690,6 +693,8 @@ Le reste du fichier (`Board1`, `Board2`, labels de score/garbage, `EndPanel`) re
 
 - [ ] **Step 3: Mettre à jour `tests/test_match.gd`**
 
+> Note : ce script `extends SceneTree` ne peut pas utiliser l'identifiant global `GameConfig` directement (limitation confirmée de Godot 4.6.3, voir Task 1) — utiliser `get_root().get_node("GameConfig")`. `match.gd` lui-même (Node2D) peut utiliser `GameConfig` directement sans problème.
+
 Remplacer le contenu actuel par :
 
 ```gdscript
@@ -700,16 +705,18 @@ const MatchScene := preload("res://scenes/Match.tscn")
 var _match: Variant = null
 
 func _initialize() -> void:
-	GameConfig.player1_source = GameConfig.SOURCE_KEYBOARD
-	GameConfig.player1_device = 0
-	GameConfig.player2_source = GameConfig.SOURCE_KEYBOARD
-	GameConfig.player2_device = 0
+	var config: Variant = get_root().get_node("GameConfig")
+	config.player1_source = config.SOURCE_KEYBOARD
+	config.player1_device = 0
+	config.player2_source = config.SOURCE_KEYBOARD
+	config.player2_device = 0
 
 	_match = MatchScene.instantiate()
 	get_root().add_child(_match)
 
 func _process(_delta: float) -> bool:
 	var m: Variant = _match
+	var config: Variant = get_root().get_node("GameConfig")
 
 	# No waiting screen: both boards start processing immediately.
 	assert(m.has_node("WaitingPanel") == false)
@@ -717,9 +724,9 @@ func _process(_delta: float) -> bool:
 	assert(m.board2.is_processing() == true)
 
 	# GameConfig is applied to each board.
-	assert(m.board1.input_source == GameConfig.SOURCE_KEYBOARD)
+	assert(m.board1.input_source == config.SOURCE_KEYBOARD)
 	assert(m.board1.keyboard_scheme == 1)
-	assert(m.board2.input_source == GameConfig.SOURCE_KEYBOARD)
+	assert(m.board2.input_source == config.SOURCE_KEYBOARD)
 	assert(m.board2.keyboard_scheme == 2)
 
 	# garbage_sent on one board routes to receive_garbage on the other.
