@@ -5,6 +5,7 @@ signal chain_updated(chain: int)
 signal game_over
 
 const BlockScene := preload("res://scenes/Block.tscn")
+const GarbageBlockScene := preload("res://scenes/GarbageBlock.tscn")
 
 const GRID_WIDTH := 6
 const VISIBLE_ROWS := 12
@@ -188,11 +189,11 @@ func _find_matches() -> Array:
 		var col := 0
 		while col < GRID_WIDTH:
 			var b: Variant = grid[row][col]
-			if b == null:
+			if not (b is Block):
 				col += 1
 				continue
 			var run_end := col + 1
-			while run_end < GRID_WIDTH and grid[row][run_end] != null and grid[row][run_end].color_id == b.color_id:
+			while run_end < GRID_WIDTH and grid[row][run_end] is Block and grid[row][run_end].color_id == b.color_id:
 				run_end += 1
 			if run_end - col >= 3:
 				for c in range(col, run_end):
@@ -203,11 +204,11 @@ func _find_matches() -> Array:
 		var row := 0
 		while row < VISIBLE_ROWS:
 			var b: Variant = grid[row][col]
-			if b == null:
+			if not (b is Block):
 				row += 1
 				continue
 			var run_end := row + 1
-			while run_end < VISIBLE_ROWS and grid[run_end][col] != null and grid[run_end][col].color_id == b.color_id:
+			while run_end < VISIBLE_ROWS and grid[run_end][col] is Block and grid[run_end][col].color_id == b.color_id:
 				run_end += 1
 			if run_end - row >= 3:
 				for r in range(row, run_end):
@@ -248,7 +249,7 @@ func _generate_row(row_index: int) -> Array:
 		if row_index >= 2:
 			var above1: Variant = grid[row_index - 1][col]
 			var above2: Variant = grid[row_index - 2][col]
-			if above1 != null and above2 != null and above1.color_id == above2.color_id:
+			if above1 is Block and above2 is Block and above1.color_id == above2.color_id:
 				forbidden.append(above1.color_id)
 		var choices := []
 		for c in range(NUM_COLORS):
@@ -263,11 +264,16 @@ func _do_rise_step() -> void:
 			_trigger_game_over()
 			return
 
+	var shifted_garbage := {}
 	for row in range(TOTAL_ROWS - 1):
 		grid[row] = grid[row + 1]
 		for col in range(GRID_WIDTH):
-			if grid[row][col] != null:
-				grid[row][col].grid_pos = Vector2i(col, row)
+			var cell: Variant = grid[row][col]
+			if cell is Block:
+				cell.grid_pos = Vector2i(col, row)
+			elif cell is GarbageBlock and not shifted_garbage.has(cell):
+				shifted_garbage[cell] = true
+				cell.origin = Vector2i(cell.origin.x, cell.origin.y - 1)
 
 	var new_colors := _generate_row(TOTAL_ROWS - 1)
 	var new_row := []
@@ -287,6 +293,17 @@ func _spawn_block(color_id: int, row: int, col: int) -> Block:
 	b.position = _cell_position(col, row)
 	return b
 
+func _spawn_garbage_block(origin: Vector2i, width: int, height: int) -> GarbageBlock:
+	var g := GarbageBlockScene.instantiate() as GarbageBlock
+	add_child(g)
+	g.setup(width, height, CELL_SIZE)
+	g.origin = origin
+	g.position = _cell_position(origin.x, origin.y)
+	for col in range(origin.x, origin.x + width):
+		for row in range(origin.y, origin.y + height):
+			grid[row][col] = g
+	return g
+
 func _cell_position(col: int, row: int) -> Vector2:
 	return Vector2(col * CELL_SIZE, row * CELL_SIZE - rise_offset)
 
@@ -294,6 +311,10 @@ func _update_visuals() -> void:
 	for row in range(TOTAL_ROWS):
 		for col in range(GRID_WIDTH):
 			var b: Variant = grid[row][col]
-			if b != null and b.state == Block.State.IDLE:
+			if b == null:
+				continue
+			if b is Block and b.state == Block.State.IDLE:
 				b.position = _cell_position(b.grid_pos.x, b.grid_pos.y)
+			elif b is GarbageBlock and b.state == GarbageBlock.State.IDLE:
+				b.position = _cell_position(b.origin.x, b.origin.y)
 	cursor_node.position = _cell_position(cursor_pos.x, cursor_pos.y)
