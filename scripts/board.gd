@@ -3,7 +3,7 @@ extends Node2D
 signal score_changed(new_score: int)
 signal chain_updated(chain: int)
 signal game_over
-signal garbage_sent(power: int)
+signal garbage_sent(pieces: Array)
 
 const BlockScene := preload("res://scenes/Block.tscn")
 const GarbageBlockScene := preload("res://scenes/GarbageBlock.tscn")
@@ -18,12 +18,13 @@ const SWAP_DURATION := 0.08
 const FALL_DURATION_PER_CELL := 0.06
 const FLASH_DURATION := 0.32
 const CLEAR_DURATION := 0.15
+const CONVERSION_FLASH_DURATION := 0.6
+const CONVERSION_DURATION_PER_LAYER := 1.0
 
 const RISE_SPEED_NORMAL := 6.0
 const RISE_SPEED_FAST := 60.0
 const MOVE_REPEAT_DELAY := 0.25
 const MOVE_REPEAT_RATE := 0.06
-const TELEGRAPH_DURATION := 2.0
 const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1
 
 const BOARD_FRAME_COLOR := Color(0.3, 0.7, 1.0)
@@ -70,9 +71,10 @@ var cursor_pos := Vector2i(GRID_WIDTH / 2 - 1, VISIBLE_ROWS - 1)
 var rise_offset := 0.0
 var score := 0
 var chain_count := 0
+var chain_max := 0
 var is_resolving := false
 var game_over_flag := false
-var pending_garbage: Array = []
+var incoming_garbage: Array = []
 
 var _swap_was_pressed := false
 var _key_held_time := {}
@@ -101,7 +103,7 @@ func _draw() -> void:
 func _process(delta: float) -> void:
 	if game_over_flag:
 		return
-	_update_garbage_queue(delta)
+	_update_incoming_garbage()
 	_handle_cursor_movement(delta)
 
 	var swap_pressed := _is_swap_pressed()
@@ -202,6 +204,7 @@ func _try_swap() -> void:
 	is_resolving = true
 	await get_tree().create_timer(SWAP_DURATION).timeout
 	chain_count = 0
+	chain_max = 0
 	await _apply_gravity()
 	await _resolve_matches()
 	is_resolving = false
@@ -209,10 +212,15 @@ func _try_swap() -> void:
 func _resolve_matches() -> void:
 	var matches := _find_matches()
 	if matches.is_empty():
+		if chain_max >= 2:
+			var h: int = min(chain_max - 1, MAX_GARBAGE_HEIGHT)
+			garbage_sent.emit([{"w": GRID_WIDTH, "h": h}])
 		chain_count = 0
+		chain_max = 0
 		return
 
 	chain_count += 1
+	chain_max = max(chain_max, chain_count)
 	var combo_size := matches.size()
 	score += _score_for(combo_size, chain_count)
 	score_changed.emit(score)
@@ -222,9 +230,8 @@ func _resolve_matches() -> void:
 	if chain_count >= SHAKE_CHAIN_THRESHOLD or combo_size >= SHAKE_COMBO_THRESHOLD:
 		shake()
 
-	var power := _garbage_power_for(combo_size, chain_count)
-	if power > 0:
-		_send_garbage(power)
+	if combo_size >= 4:
+		garbage_sent.emit(_garbage_combo_pieces(combo_size))
 
 	var to_shatter := {}
 	for pos in matches:
@@ -253,61 +260,28 @@ func _resolve_matches() -> void:
 		b.queue_free()
 
 	for g in to_shatter.keys():
-		_shatter_garbage_bottom_row(g)
+		_convert_garbage_block(g)
 
 	await _apply_gravity()
 	await _resolve_matches()
 
-func _send_garbage(power: int) -> void:
-	var remaining := power
-	var i := 0
-	while remaining > 0 and i < pending_garbage.size():
-		var item: Dictionary = pending_garbage[i]
-		var cancel: int = min(remaining, item.power)
-		item.power -= cancel
-		remaining -= cancel
-		if item.power <= 0:
-			pending_garbage.remove_at(i)
-		else:
-			pending_garbage[i] = item
-			i += 1
-	if remaining > 0:
-		garbage_sent.emit(remaining)
+func receive_garbage(pieces: Array) -> void:
+	for piece in pieces:
+		incoming_garbage.append(piece)
 
-func receive_garbage(power: int) -> void:
-	var shape := _garbage_shape_for_power(power)
-	var width: int = shape.width
-	var c0: int = randi() % (GRID_WIDTH - width + 1)
-	pending_garbage.append({
-		"power": power,
-		"telegraph_time": TELEGRAPH_DURATION,
-		"columns": Vector2i(c0, shape.width),
-	})
-
-func _update_garbage_queue(delta: float) -> void:
-	for i in range(pending_garbage.size()):
-		var item: Dictionary = pending_garbage[i]
-		if item.telegraph_time > 0.0:
-			item.telegraph_time = max(0.0, item.telegraph_time - delta)
-			pending_garbage[i] = item
-
-	if pending_garbage.is_empty() or is_resolving:
+func _update_incoming_garbage() -> void:
+	if incoming_garbage.is_empty() or is_resolving:
 		return
-
-	var item: Dictionary = pending_garbage[0]
-	if item.telegraph_time > 0.0:
-		return
-
-	var shape := _garbage_shape_for_power(item.power)
-	var c0: int = clampi(item.columns.x, 0, GRID_WIDTH - shape.width)
-
-	for row in range(shape.height):
-		for col in range(c0, c0 + shape.width):
+	var piece: Dictionary = incoming_garbage[0]
+	var w: int = piece.w
+	var h: int = piece.h
+	var c0: int = 0 if w >= GRID_WIDTH else randi() % (GRID_WIDTH - w + 1)
+	for row in range(h):
+		for col in range(c0, c0 + w):
 			if grid[row][col] != null:
 				return
-
-	_spawn_garbage_block(Vector2i(c0, 0), shape.width, shape.height)
-	pending_garbage.remove_at(0)
+	_spawn_garbage_block(Vector2i(c0, 0), w, h)
+	incoming_garbage.remove_at(0)
 	_settle_after_garbage_arrival()
 
 ## Newly-arrived garbage spawns at the top of the board; without this it
@@ -317,16 +291,28 @@ func _settle_after_garbage_arrival() -> void:
 	await _apply_gravity()
 	is_resolving = false
 
-func _shatter_garbage_bottom_row(g: GarbageBlock) -> void:
-	var bottom_row := g.origin.y + g.height - 1
-	for col in range(g.origin.x, g.origin.x + g.width):
-		grid[bottom_row][col] = _spawn_block(randi() % NUM_COLORS, bottom_row, col)
-	g.play_shatter_row(g.height - 1, CELL_SIZE)
-	g.height -= 1
-	if g.height <= 0:
-		g.queue_free()
-	else:
-		g.shrink_to(g.height, CELL_SIZE)
+func _convert_garbage_block(g: GarbageBlock) -> void:
+	g.play_match_flash()
+	await get_tree().create_timer(CONVERSION_FLASH_DURATION).timeout
+	while g.height > 0:
+		var bottom_row := g.origin.y + g.height - 1
+		for col in range(g.origin.x, g.origin.x + g.width):
+			grid[bottom_row][col] = _spawn_block(randi() % NUM_COLORS, bottom_row, col)
+		g.play_shatter_row(g.height - 1, CELL_SIZE)
+		g.height -= 1
+		var fully_converted := g.height <= 0
+		if fully_converted:
+			g.queue_free()
+		else:
+			g.shrink_to(g.height, CELL_SIZE)
+		await get_tree().create_timer(CONVERSION_DURATION_PER_LAYER).timeout
+		if not is_resolving:
+			is_resolving = true
+			await _apply_gravity()
+			await _resolve_matches()
+			is_resolving = false
+		if fully_converted:
+			break
 
 func _apply_gravity() -> void:
 	var start_pos := {}
@@ -441,22 +427,18 @@ func _score_for(combo_size: int, chain: int) -> int:
 		base_score += (combo_size - 3) * 20
 	return base_score * chain
 
-func _garbage_power_for(combo_size: int, chain: int) -> int:
-	if chain >= 2:
-		var height: int = min(chain - 1, 12)
-		return 6 * height
-	if combo_size >= 4:
-		return min(combo_size - 1, 6)
-	return 0
-
-func _garbage_shape_for_power(power: int) -> Dictionary:
-	if power <= 0:
-		return {"height": 0, "width": 0}
-	if power <= GRID_WIDTH:
-		return {"height": 1, "width": power}
-	var height: int = int(ceil(power / float(GRID_WIDTH)))
-	height = min(height, MAX_GARBAGE_HEIGHT)
-	return {"height": height, "width": GRID_WIDTH}
+func _garbage_combo_pieces(combo_size: int) -> Array:
+	if combo_size < 4:
+		return []
+	var w: int = combo_size - 1
+	var num_pieces: int = int(ceil(w / float(GRID_WIDTH)))
+	var base: int = w / num_pieces
+	var remainder: int = w % num_pieces
+	var pieces := []
+	for i in range(num_pieces):
+		var piece_w: int = base + (1 if i < remainder else 0)
+		pieces.append({"w": piece_w, "h": 1})
+	return pieces
 
 func _generate_row(row_index: int) -> Array:
 	var row_colors := []

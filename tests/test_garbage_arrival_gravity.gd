@@ -20,14 +20,13 @@ func _process(_delta: float) -> bool:
 	var board: Variant = _board
 	_clear(board)
 
-	# Queue a 1-row garbage block with its telegraph already elapsed.
-	board.receive_garbage(3)
-	board.pending_garbage[0].telegraph_time = 0.0
+	# Queue a 1-row garbage block.
+	board.receive_garbage([{"w": 3, "h": 1}])
 
 	# This is what _process() calls every frame to deliver queued garbage.
-	board._update_garbage_queue(0.0)
+	board._update_incoming_garbage()
 
-	assert(board.pending_garbage.is_empty())
+	assert(board.incoming_garbage.is_empty())
 
 	var g: Variant = null
 	for row in range(board.VISIBLE_ROWS):
