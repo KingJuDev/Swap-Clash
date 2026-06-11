@@ -26,6 +26,10 @@ const MOVE_REPEAT_RATE := 0.06
 const TELEGRAPH_DURATION := 2.0
 const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1
 
+@export var input_device: int = 0
+
+const JOY_AXIS_DEADZONE := 0.5
+
 @onready var cursor_node: ColorRect = $Cursor
 
 # grid[row][col] -> Block or null. (0,0) is the top-left visible cell.
@@ -41,7 +45,7 @@ var is_resolving := false
 var game_over_flag := false
 var pending_garbage: Array = []
 
-var _space_was_pressed := false
+var _swap_was_pressed := false
 var _key_held_time := {}
 
 func _ready() -> void:
@@ -64,13 +68,13 @@ func _process(delta: float) -> void:
 	_update_garbage_queue(delta)
 	_handle_cursor_movement(delta)
 
-	var space_pressed := Input.is_key_pressed(KEY_SPACE)
-	if space_pressed and not _space_was_pressed and not is_resolving:
+	var swap_pressed := Input.is_joy_button_pressed(input_device, JOY_BUTTON_A)
+	if swap_pressed and not _swap_was_pressed and not is_resolving:
 		_try_swap()
-	_space_was_pressed = space_pressed
+	_swap_was_pressed = swap_pressed
 
 	if not is_resolving:
-		var rise_speed := RISE_SPEED_FAST if Input.is_key_pressed(KEY_SHIFT) else RISE_SPEED_NORMAL
+		var rise_speed := RISE_SPEED_FAST if Input.is_joy_button_pressed(input_device, JOY_BUTTON_B) else RISE_SPEED_NORMAL
 		rise_offset += rise_speed * delta
 		while rise_offset >= CELL_SIZE:
 			rise_offset -= CELL_SIZE
@@ -82,29 +86,41 @@ func _process(delta: float) -> void:
 
 func _handle_cursor_movement(delta: float) -> void:
 	var dirs := {
-		KEY_LEFT: Vector2i(-1, 0),
-		KEY_RIGHT: Vector2i(1, 0),
-		KEY_UP: Vector2i(0, -1),
-		KEY_DOWN: Vector2i(0, 1),
+		"left": Vector2i(-1, 0),
+		"right": Vector2i(1, 0),
+		"up": Vector2i(0, -1),
+		"down": Vector2i(0, 1),
 	}
-	for key in dirs.keys():
-		if Input.is_key_pressed(key):
-			var prev: float = _key_held_time.get(key, -1.0)
+	for dir_name in dirs.keys():
+		if _is_direction_pressed(dir_name):
+			var prev: float = _key_held_time.get(dir_name, -1.0)
 			if prev < 0.0:
-				_move_cursor(dirs[key])
-				_key_held_time[key] = 0.0
+				_move_cursor(dirs[dir_name])
+				_key_held_time[dir_name] = 0.0
 			else:
 				var cur: float = prev + delta
 				if prev < MOVE_REPEAT_DELAY and cur >= MOVE_REPEAT_DELAY:
-					_move_cursor(dirs[key])
+					_move_cursor(dirs[dir_name])
 				elif prev >= MOVE_REPEAT_DELAY:
 					var prev_ticks: float = floor((prev - MOVE_REPEAT_DELAY) / MOVE_REPEAT_RATE)
 					var cur_ticks: float = floor((cur - MOVE_REPEAT_DELAY) / MOVE_REPEAT_RATE)
 					if cur_ticks > prev_ticks:
-						_move_cursor(dirs[key])
-				_key_held_time[key] = cur
+						_move_cursor(dirs[dir_name])
+				_key_held_time[dir_name] = cur
 		else:
-			_key_held_time[key] = -1.0
+			_key_held_time[dir_name] = -1.0
+
+func _is_direction_pressed(dir_name: String) -> bool:
+	match dir_name:
+		"left":
+			return Input.is_joy_button_pressed(input_device, JOY_BUTTON_DPAD_LEFT) or Input.get_joy_axis(input_device, JOY_AXIS_LEFT_X) < -JOY_AXIS_DEADZONE
+		"right":
+			return Input.is_joy_button_pressed(input_device, JOY_BUTTON_DPAD_RIGHT) or Input.get_joy_axis(input_device, JOY_AXIS_LEFT_X) > JOY_AXIS_DEADZONE
+		"up":
+			return Input.is_joy_button_pressed(input_device, JOY_BUTTON_DPAD_UP) or Input.get_joy_axis(input_device, JOY_AXIS_LEFT_Y) < -JOY_AXIS_DEADZONE
+		"down":
+			return Input.is_joy_button_pressed(input_device, JOY_BUTTON_DPAD_DOWN) or Input.get_joy_axis(input_device, JOY_AXIS_LEFT_Y) > JOY_AXIS_DEADZONE
+	return false
 
 func _move_cursor(dir: Vector2i) -> void:
 	var new_pos := cursor_pos + dir
