@@ -393,11 +393,11 @@ func _find_matches() -> Array:
 		var col := 0
 		while col < GRID_WIDTH:
 			var b: Variant = grid[row][col]
-			if not (b is Block):
+			if not (b is Block) or b.state != Block.State.IDLE:
 				col += 1
 				continue
 			var run_end := col + 1
-			while run_end < GRID_WIDTH and grid[row][run_end] is Block and grid[row][run_end].color_id == b.color_id:
+			while run_end < GRID_WIDTH and grid[row][run_end] is Block and grid[row][run_end].state == Block.State.IDLE and grid[row][run_end].color_id == b.color_id:
 				run_end += 1
 			if run_end - col >= 3:
 				for c in range(col, run_end):
@@ -408,11 +408,11 @@ func _find_matches() -> Array:
 		var row := 0
 		while row < VISIBLE_ROWS:
 			var b: Variant = grid[row][col]
-			if not (b is Block):
+			if not (b is Block) or b.state != Block.State.IDLE:
 				row += 1
 				continue
 			var run_end := row + 1
-			while run_end < VISIBLE_ROWS and grid[run_end][col] is Block and grid[run_end][col].color_id == b.color_id:
+			while run_end < VISIBLE_ROWS and grid[run_end][col] is Block and grid[run_end][col].state == Block.State.IDLE and grid[run_end][col].color_id == b.color_id:
 				run_end += 1
 			if run_end - row >= 3:
 				for r in range(row, run_end):
