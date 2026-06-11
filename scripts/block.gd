@@ -1,7 +1,7 @@
 class_name Block
 extends ColorRect
 
-enum State { IDLE, SWAPPING, FALLING, MATCHED, CLEARING }
+enum State { IDLE, SWAPPING, FLOATING, FALLING, MATCHED, CLEARING }
 
 const COLORS := NeonTheme.NEON_COLORS
 const SHAPES := NeonTheme.SHAPES
@@ -12,6 +12,9 @@ const CLEAR_DURATION := 0.15
 var color_id: int = 0
 var state: State = State.IDLE
 var grid_pos: Vector2i = Vector2i.ZERO
+var from_chain: bool = false
+var float_timer: float = 0.0
+var state_timer: float = 0.0
 
 func _ready() -> void:
 	pivot_offset = size / 2.0
@@ -41,10 +44,10 @@ func play_fall(target_pos: Vector2, duration: float) -> void:
 	tween.tween_property(self, "position", target_pos, duration)
 	tween.finished.connect(func():
 		state = State.IDLE
-		_play_land_squash()
+		play_land_squash()
 	)
 
-func _play_land_squash() -> void:
+func play_land_squash() -> void:
 	var tween := create_tween()
 	tween.tween_property(self, "scale", Vector2(1.25, 0.75), 0.05)
 	tween.tween_property(self, "scale", Vector2(1, 1), 0.08)

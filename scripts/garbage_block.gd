@@ -1,7 +1,7 @@
 class_name GarbageBlock
 extends ColorRect
 
-enum State { IDLE, FALLING, FLASHING }
+enum State { IDLE, FLOATING, FALLING, FLASHING }
 
 const GARBAGE_COLOR := Color(0.4, 0.4, 0.4)
 const GRID_LINE_COLOR := Color(0.05, 0.05, 0.08, 0.6)
@@ -12,6 +12,7 @@ var width: int = 1
 var height: int = 1
 var origin: Vector2i = Vector2i.ZERO
 var state: State = State.IDLE
+var float_timer: float = 0.0
 
 var _cell_size: int = 64
 
