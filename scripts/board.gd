@@ -39,6 +39,7 @@ var score := 0
 var chain_count := 0
 var is_resolving := false
 var game_over_flag := false
+var pending_garbage: Array = []
 
 var _space_was_pressed := false
 var _key_held_time := {}
@@ -60,6 +61,7 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	if game_over_flag:
 		return
+	_update_garbage_queue(delta)
 	_handle_cursor_movement(delta)
 
 	var space_pressed := Input.is_key_pressed(KEY_SPACE)
@@ -187,7 +189,55 @@ func _resolve_matches() -> void:
 	await _resolve_matches()
 
 func _send_garbage(power: int) -> void:
-	garbage_sent.emit(power)
+	var remaining := power
+	var i := 0
+	while remaining > 0 and i < pending_garbage.size():
+		var item: Dictionary = pending_garbage[i]
+		var cancel: int = min(remaining, item.power)
+		item.power -= cancel
+		remaining -= cancel
+		if item.power <= 0:
+			pending_garbage.remove_at(i)
+		else:
+			pending_garbage[i] = item
+			i += 1
+	if remaining > 0:
+		garbage_sent.emit(remaining)
+
+func receive_garbage(power: int) -> void:
+	var shape := _garbage_shape_for_power(power)
+	var width: int = shape.width
+	var c0: int = randi() % (GRID_WIDTH - width + 1)
+	pending_garbage.append({
+		"power": power,
+		"telegraph_time": TELEGRAPH_DURATION,
+		"columns": Vector2i(c0, shape.width),
+	})
+
+func _update_garbage_queue(delta: float) -> void:
+	for i in range(pending_garbage.size()):
+		var item: Dictionary = pending_garbage[i]
+		if item.telegraph_time > 0.0:
+			item.telegraph_time = max(0.0, item.telegraph_time - delta)
+			pending_garbage[i] = item
+
+	if pending_garbage.is_empty():
+		return
+
+	var item: Dictionary = pending_garbage[0]
+	if item.telegraph_time > 0.0:
+		return
+
+	var shape := _garbage_shape_for_power(item.power)
+	var c0: int = clampi(item.columns.x, 0, GRID_WIDTH - shape.width)
+
+	for row in range(shape.height):
+		for col in range(c0, c0 + shape.width):
+			if grid[row][col] != null:
+				return
+
+	_spawn_garbage_block(Vector2i(c0, 0), shape.width, shape.height)
+	pending_garbage.remove_at(0)
 
 func _shatter_garbage_bottom_row(g: GarbageBlock) -> void:
 	var bottom_row := g.origin.y + g.height - 1
