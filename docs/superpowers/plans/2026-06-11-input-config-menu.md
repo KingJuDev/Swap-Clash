@@ -634,12 +634,13 @@ extends Node2D
 @onready var restart_button: Button = $EndPanel/RestartButton
 
 func _ready() -> void:
-	board1.input_source = GameConfig.player1_source
-	board1.input_device = GameConfig.player1_device
+	var config: Node = get_node("/root/GameConfig")
+	board1.input_source = config.player1_source
+	board1.input_device = config.player1_device
 	board1.keyboard_scheme = 1
 
-	board2.input_source = GameConfig.player2_source
-	board2.input_device = GameConfig.player2_device
+	board2.input_source = config.player2_source
+	board2.input_device = config.player2_device
 	board2.keyboard_scheme = 2
 
 	board1.score_changed.connect(func(s: int): score_label1.text = "Score: %d" % s)
@@ -693,7 +694,9 @@ Le reste du fichier (`Board1`, `Board2`, labels de score/garbage, `EndPanel`) re
 
 - [ ] **Step 3: Mettre à jour `tests/test_match.gd`**
 
-> Note : ce script `extends SceneTree` ne peut pas utiliser l'identifiant global `GameConfig` directement (limitation confirmée de Godot 4.6.3, voir Task 1) — utiliser `get_root().get_node("GameConfig")`. `match.gd` lui-même (Node2D) peut utiliser `GameConfig` directement sans problème.
+> Note : ce script `extends SceneTree` ne peut pas utiliser l'identifiant global `GameConfig` directement (limitation confirmée de Godot 4.6.3, voir Task 1) — utiliser `get_root().get_node("GameConfig")`.
+>
+> **Correction importante** : contrairement à ce qui était indiqué précédemment, `match.gd` (Node2D) NE PEUT PAS non plus utiliser l'identifiant global `GameConfig` directement sous `--headless --script` — testé empiriquement sur `setup_menu.gd` (même limitation : "Compile Error: Identifier not found: GameConfig"). `match.gd` doit donc utiliser `get_node("/root/GameConfig")` dans `_ready()`, exactement comme `setup_menu.gd` le fait déjà dans `_apply_selection()`. Le Step 1 ci-dessus a été corrigé en conséquence.
 
 Remplacer le contenu actuel par :
 
