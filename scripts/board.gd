@@ -21,6 +21,8 @@ const RISE_SPEED_NORMAL := 6.0
 const RISE_SPEED_FAST := 60.0
 const MOVE_REPEAT_DELAY := 0.25
 const MOVE_REPEAT_RATE := 0.06
+const TELEGRAPH_DURATION := 2.0
+const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1
 
 @onready var cursor_node: ColorRect = $Cursor
 
@@ -227,6 +229,15 @@ func _garbage_power_for(combo_size: int, chain: int) -> int:
 	if combo_size >= 4:
 		return min(combo_size - 1, 6)
 	return 0
+
+func _garbage_shape_for_power(power: int) -> Dictionary:
+	if power <= 0:
+		return {"height": 0, "width": 0}
+	if power <= GRID_WIDTH:
+		return {"height": 1, "width": power}
+	var height: int = int(ceil(power / float(GRID_WIDTH)))
+	height = min(height, MAX_GARBAGE_HEIGHT)
+	return {"height": height, "width": GRID_WIDTH}
 
 func _generate_row(row_index: int) -> Array:
 	var row_colors := []
