@@ -291,7 +291,7 @@ func _update_garbage_queue(delta: float) -> void:
 			item.telegraph_time = max(0.0, item.telegraph_time - delta)
 			pending_garbage[i] = item
 
-	if pending_garbage.is_empty():
+	if pending_garbage.is_empty() or is_resolving:
 		return
 
 	var item: Dictionary = pending_garbage[0]
@@ -308,6 +308,14 @@ func _update_garbage_queue(delta: float) -> void:
 
 	_spawn_garbage_block(Vector2i(c0, 0), shape.width, shape.height)
 	pending_garbage.remove_at(0)
+	_settle_after_garbage_arrival()
+
+## Newly-arrived garbage spawns at the top of the board; without this it
+## would float there until the player's next swap triggered gravity.
+func _settle_after_garbage_arrival() -> void:
+	is_resolving = true
+	await _apply_gravity()
+	is_resolving = false
 
 func _shatter_garbage_bottom_row(g: GarbageBlock) -> void:
 	var bottom_row := g.origin.y + g.height - 1
