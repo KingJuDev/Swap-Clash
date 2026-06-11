@@ -20,6 +20,8 @@ const FLASH_DURATION := 0.32
 const CLEAR_DURATION := 0.15
 const CONVERSION_FLASH_DURATION := 0.6
 const CONVERSION_DURATION_PER_LAYER := 1.0
+const FLOAT_DELAY := 0.2
+const FALL_SPEED: float = CELL_SIZE / FALL_DURATION_PER_CELL
 
 const RISE_SPEED_NORMAL := 6.0
 const RISE_SPEED_FAST := 60.0
@@ -75,6 +77,7 @@ var chain_max := 0
 var is_resolving := false
 var game_over_flag := false
 var incoming_garbage: Array = []
+var _landed_this_frame: Array = []
 
 var _swap_was_pressed := false
 var _key_held_time := {}
@@ -313,6 +316,68 @@ func _convert_garbage_block(g: GarbageBlock) -> void:
 			is_resolving = false
 		if fully_converted:
 			break
+
+func _check_block_floating(b: Block) -> void:
+	var col := b.grid_pos.x
+	var row := b.grid_pos.y
+	if row >= VISIBLE_ROWS - 1:
+		return
+	if grid[row + 1][col] == null:
+		b.state = Block.State.FLOATING
+		b.float_timer = FLOAT_DELAY
+		b.from_chain = true
+
+func _update_falling_block(b: Block, delta: float) -> void:
+	var col := b.grid_pos.x
+	var row := b.grid_pos.y
+	b.position.y += FALL_SPEED * delta
+	while true:
+		var next_row := row + 1
+		var blocked := next_row >= VISIBLE_ROWS or grid[next_row][col] != null
+		if blocked:
+			var floor_y: float = row * CELL_SIZE - rise_offset
+			if b.position.y >= floor_y:
+				b.position.y = floor_y
+				b.grid_pos = Vector2i(col, row)
+				b.state = Block.State.IDLE
+				b.play_land_squash()
+				_landed_this_frame.append(b)
+			break
+		var next_y: float = next_row * CELL_SIZE - rise_offset
+		if b.position.y >= next_y:
+			grid[row][col] = null
+			grid[next_row][col] = b
+			row = next_row
+			b.grid_pos = Vector2i(col, row)
+		else:
+			break
+
+func _update_blocks(delta: float) -> void:
+	_landed_this_frame.clear()
+	for row in range(VISIBLE_ROWS - 1, -1, -1):
+		for col in range(GRID_WIDTH):
+			var b: Variant = grid[row][col]
+			if not (b is Block):
+				continue
+			match b.state:
+				Block.State.IDLE:
+					_check_block_floating(b)
+				Block.State.FLOATING:
+					b.float_timer -= delta
+					if b.float_timer <= 0.0:
+						b.state = Block.State.FALLING
+				Block.State.FALLING:
+					_update_falling_block(b, delta)
+				Block.State.MATCHED:
+					b.state_timer -= delta
+					if b.state_timer <= 0.0:
+						b.play_clear()
+						b.state_timer = CLEAR_DURATION
+				Block.State.CLEARING:
+					b.state_timer -= delta
+					if b.state_timer <= 0.0:
+						grid[row][col] = null
+						b.queue_free()
 
 func _apply_gravity() -> void:
 	var start_pos := {}
