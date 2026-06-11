@@ -5,18 +5,29 @@ const MatchScene := preload("res://scenes/Match.tscn")
 var _match: Variant = null
 
 func _initialize() -> void:
+	var config: Variant = get_root().get_node("GameConfig")
+	config.player1_source = config.SOURCE_KEYBOARD
+	config.player1_device = 0
+	config.player2_source = config.SOURCE_KEYBOARD
+	config.player2_device = 0
+
 	_match = MatchScene.instantiate()
 	get_root().add_child(_match)
 
 func _process(_delta: float) -> bool:
 	var m: Variant = _match
+	var config: Variant = get_root().get_node("GameConfig")
 
-	# No gamepads connected in headless mode -> waiting screen, boards paused.
-	assert(m.waiting_panel.visible == true)
-	assert(m.board1.is_processing() == false)
-	assert(m.board2.is_processing() == false)
-	assert(m.board1.input_device == 0)
-	assert(m.board2.input_device == 1)
+	# No waiting screen: both boards start processing immediately.
+	assert(m.has_node("WaitingPanel") == false)
+	assert(m.board1.is_processing() == true)
+	assert(m.board2.is_processing() == true)
+
+	# GameConfig is applied to each board.
+	assert(m.board1.input_source == config.SOURCE_KEYBOARD)
+	assert(m.board1.keyboard_scheme == 1)
+	assert(m.board2.input_source == config.SOURCE_KEYBOARD)
+	assert(m.board2.keyboard_scheme == 2)
 
 	# garbage_sent on one board routes to receive_garbage on the other.
 	m.board1.garbage_sent.emit(5)
