@@ -3,6 +3,7 @@ extends Node2D
 signal score_changed(new_score: int)
 signal chain_updated(chain: int)
 signal game_over
+signal garbage_sent(power: int)
 
 const BlockScene := preload("res://scenes/Block.tscn")
 const GarbageBlockScene := preload("res://scenes/GarbageBlock.tscn")
@@ -143,13 +144,31 @@ func _resolve_matches() -> void:
 		return
 
 	chain_count += 1
-	score += _score_for(matches.size(), chain_count)
+	var combo_size := matches.size()
+	score += _score_for(combo_size, chain_count)
 	score_changed.emit(score)
 	if chain_count > 1:
 		chain_updated.emit(chain_count)
 
+	var power := _garbage_power_for(combo_size, chain_count)
+	if power > 0:
+		_send_garbage(power)
+
+	var to_shatter := {}
+	for pos in matches:
+		var p: Vector2i = pos
+		for dir in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
+			var n: Vector2i = p + dir
+			if n.x < 0 or n.x >= GRID_WIDTH or n.y < 0 or n.y >= VISIBLE_ROWS:
+				continue
+			var cell: Variant = grid[n.y][n.x]
+			if cell is GarbageBlock:
+				to_shatter[cell] = true
+
 	for pos in matches:
 		grid[pos.y][pos.x].play_match_flash()
+	for g in to_shatter.keys():
+		g.play_match_flash()
 	await get_tree().create_timer(FLASH_DURATION).timeout
 
 	for pos in matches:
@@ -161,8 +180,24 @@ func _resolve_matches() -> void:
 		grid[pos.y][pos.x] = null
 		b.queue_free()
 
+	for g in to_shatter.keys():
+		_shatter_garbage_bottom_row(g)
+
 	await _apply_gravity()
 	await _resolve_matches()
+
+func _send_garbage(power: int) -> void:
+	garbage_sent.emit(power)
+
+func _shatter_garbage_bottom_row(g: GarbageBlock) -> void:
+	var bottom_row := g.origin.y + g.height - 1
+	for col in range(g.origin.x, g.origin.x + g.width):
+		grid[bottom_row][col] = _spawn_block(randi() % NUM_COLORS, bottom_row, col)
+	g.height -= 1
+	if g.height <= 0:
+		g.queue_free()
+	else:
+		g.shrink_to(g.height, CELL_SIZE)
 
 func _apply_gravity() -> void:
 	var start_pos := {}
