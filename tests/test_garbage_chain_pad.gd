@@ -25,11 +25,12 @@ func _process(_delta: float) -> bool:
 	board.chain_max = 3
 	board.garbage_sent.connect(func(pieces: Array): _emitted.append(pieces))
 
-	board._resolve_matches()
+	board._end_chain()
 
 	assert(_emitted == [[{"w": 6, "h": 2}]])
 	assert(board.chain_count == 0)
 	assert(board.chain_max == 0)
+	assert(board.combo_max == 0)
 
 	print("ALL TESTS PASSED")
 	quit()

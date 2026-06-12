@@ -75,7 +75,6 @@ var score := 0
 var chain_count := 0
 var chain_max := 0
 var combo_max := 0
-var is_resolving := false
 var game_over_flag := false
 var incoming_garbage: Array = []
 var _landed_this_frame: Array = []
@@ -111,11 +110,13 @@ func _process(delta: float) -> void:
 	_handle_cursor_movement(delta)
 
 	var swap_pressed := _is_swap_pressed()
-	if swap_pressed and not _swap_was_pressed and not is_resolving:
+	if swap_pressed and not _swap_was_pressed:
 		_try_swap()
 	_swap_was_pressed = swap_pressed
 
-	if not is_resolving:
+	_advance_simulation(delta)
+
+	if _is_board_settled():
 		var rise_speed := RISE_SPEED_FAST if _is_fast_rise_pressed() else RISE_SPEED_NORMAL
 		rise_offset += rise_speed * delta
 		while rise_offset >= CELL_SIZE:
@@ -193,7 +194,9 @@ func _try_swap() -> void:
 	var b2: Variant = grid[row][col2]
 	if b1 == null and b2 == null:
 		return
-	if (b1 != null and b1.state != Block.State.IDLE) or (b2 != null and b2.state != Block.State.IDLE):
+	if b1 != null and not (b1 is Block and b1.state == Block.State.IDLE):
+		return
+	if b2 != null and not (b2 is Block and b2.state == Block.State.IDLE):
 		return
 
 	grid[row][col1] = b2
@@ -204,14 +207,6 @@ func _try_swap() -> void:
 	if b2 != null:
 		b2.grid_pos = Vector2i(col1, row)
 		b2.play_swap(_cell_position(col1, row), SWAP_DURATION)
-
-	is_resolving = true
-	await get_tree().create_timer(SWAP_DURATION).timeout
-	chain_count = 0
-	chain_max = 0
-	await _apply_gravity()
-	await _resolve_matches()
-	is_resolving = false
 
 func _check_matches() -> void:
 	var matches := _find_matches()
@@ -290,68 +285,12 @@ func _advance_simulation(delta: float) -> void:
 	if _is_board_settled() and chain_max > 0:
 		_end_chain()
 
-func _resolve_matches() -> void:
-	var matches := _find_matches()
-	if matches.is_empty():
-		if chain_max >= 2:
-			var h: int = min(chain_max - 1, MAX_GARBAGE_HEIGHT)
-			garbage_sent.emit([{"w": GRID_WIDTH, "h": h}])
-		chain_count = 0
-		chain_max = 0
-		return
-
-	chain_count += 1
-	chain_max = max(chain_max, chain_count)
-	var combo_size := matches.size()
-	score += _score_for(combo_size, chain_count)
-	score_changed.emit(score)
-	if chain_count > 1:
-		chain_updated.emit(chain_count)
-
-	if chain_count >= SHAKE_CHAIN_THRESHOLD or combo_size >= SHAKE_COMBO_THRESHOLD:
-		shake()
-
-	if combo_size >= 4:
-		garbage_sent.emit(_garbage_combo_pieces(combo_size))
-
-	var to_shatter := {}
-	for pos in matches:
-		var p: Vector2i = pos
-		for dir in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
-			var n: Vector2i = p + dir
-			if n.x < 0 or n.x >= GRID_WIDTH or n.y < 0 or n.y >= VISIBLE_ROWS:
-				continue
-			var cell: Variant = grid[n.y][n.x]
-			if cell is GarbageBlock:
-				to_shatter[cell] = true
-
-	for pos in matches:
-		grid[pos.y][pos.x].play_match_flash()
-	for g in to_shatter.keys():
-		g.play_match_flash()
-	await get_tree().create_timer(FLASH_DURATION).timeout
-
-	for pos in matches:
-		grid[pos.y][pos.x].play_clear()
-	await get_tree().create_timer(CLEAR_DURATION).timeout
-
-	for pos in matches:
-		var b: Variant = grid[pos.y][pos.x]
-		grid[pos.y][pos.x] = null
-		b.queue_free()
-
-	for g in to_shatter.keys():
-		_convert_garbage_block(g)
-
-	await _apply_gravity()
-	await _resolve_matches()
-
 func receive_garbage(pieces: Array) -> void:
 	for piece in pieces:
 		incoming_garbage.append(piece)
 
 func _update_incoming_garbage() -> void:
-	if incoming_garbage.is_empty() or is_resolving:
+	if incoming_garbage.is_empty():
 		return
 	var piece: Dictionary = incoming_garbage[0]
 	var w: int = piece.w
@@ -361,24 +300,23 @@ func _update_incoming_garbage() -> void:
 		for col in range(c0, c0 + w):
 			if grid[row][col] != null:
 				return
-	_spawn_garbage_block(Vector2i(c0, 0), w, h)
+	var g := _spawn_garbage_block(Vector2i(c0, 0), w, h)
+	g.state = GarbageBlock.State.FLOATING
+	g.float_timer = FLOAT_DELAY
 	incoming_garbage.remove_at(0)
-	_settle_after_garbage_arrival()
-
-## Newly-arrived garbage spawns at the top of the board; without this it
-## would float there until the player's next swap triggered gravity.
-func _settle_after_garbage_arrival() -> void:
-	is_resolving = true
-	await _apply_gravity()
-	is_resolving = false
 
 func _convert_garbage_block(g: GarbageBlock) -> void:
+	g.state = GarbageBlock.State.FLASHING
 	g.play_match_flash()
 	await get_tree().create_timer(CONVERSION_FLASH_DURATION).timeout
 	while g.height > 0:
 		var bottom_row := g.origin.y + g.height - 1
 		for col in range(g.origin.x, g.origin.x + g.width):
-			grid[bottom_row][col] = _spawn_block(randi() % NUM_COLORS, bottom_row, col)
+			var b := _spawn_block(randi() % NUM_COLORS, bottom_row, col)
+			b.state = Block.State.FLOATING
+			b.from_chain = true
+			b.float_timer = FLOAT_DELAY
+			grid[bottom_row][col] = b
 		g.play_shatter_row(g.height - 1, CELL_SIZE)
 		g.height -= 1
 		var fully_converted := g.height <= 0
@@ -386,12 +324,8 @@ func _convert_garbage_block(g: GarbageBlock) -> void:
 			g.queue_free()
 		else:
 			g.shrink_to(g.height, CELL_SIZE)
+			g.state = GarbageBlock.State.FLASHING
 		await get_tree().create_timer(CONVERSION_DURATION_PER_LAYER).timeout
-		if not is_resolving:
-			is_resolving = true
-			await _apply_gravity()
-			await _resolve_matches()
-			is_resolving = false
 		if fully_converted:
 			break
 
@@ -515,78 +449,6 @@ func _update_garbage_blocks(delta: float) -> void:
 					_update_falling_garbage(g, delta)
 				GarbageBlock.State.FLASHING:
 					pass
-
-func _apply_gravity() -> void:
-	var start_pos := {}
-	var any_moved := true
-	while any_moved:
-		any_moved = false
-
-		# Compact normal blocks within each column, segment by segment
-		# (a GarbageBlock cell acts as a solid floor for the segment above it).
-		for col in range(GRID_WIDTH):
-			var write_row := VISIBLE_ROWS - 1
-			for row in range(VISIBLE_ROWS - 1, -1, -1):
-				var cell: Variant = grid[row][col]
-				if cell is GarbageBlock:
-					write_row = row - 1
-					continue
-				if cell != null:
-					if not start_pos.has(cell):
-						start_pos[cell] = cell.grid_pos
-					if write_row != row:
-						grid[write_row][col] = cell
-						grid[row][col] = null
-						cell.grid_pos = Vector2i(col, write_row)
-						any_moved = true
-					write_row -= 1
-
-		# Move garbage blocks down as units, by the smallest empty gap under
-		# any of the columns they cover.
-		var processed := {}
-		for row in range(VISIBLE_ROWS - 1, -1, -1):
-			for col in range(GRID_WIDTH):
-				var cell: Variant = grid[row][col]
-				if cell is GarbageBlock and not processed.has(cell):
-					processed[cell] = true
-					if not start_pos.has(cell):
-						start_pos[cell] = cell.origin
-					var drop := _garbage_drop_distance(cell)
-					if drop > 0:
-						_move_garbage_block(cell, drop)
-						any_moved = true
-
-	var any_falling := false
-	for cell in start_pos.keys():
-		var start: Vector2i = start_pos[cell]
-		var end: Vector2i = cell.grid_pos if cell is Block else cell.origin
-		var dist := end.y - start.y
-		if dist > 0:
-			cell.play_fall(_cell_position(end.x, end.y), FALL_DURATION_PER_CELL * dist)
-			any_falling = true
-	if any_falling:
-		await get_tree().create_timer(FALL_DURATION_PER_CELL * VISIBLE_ROWS).timeout
-
-func _garbage_drop_distance(g: GarbageBlock) -> int:
-	var bottom_row := g.origin.y + g.height - 1
-	var max_drop := VISIBLE_ROWS
-	for col in range(g.origin.x, g.origin.x + g.width):
-		var empty_below := 0
-		var row := bottom_row + 1
-		while row < VISIBLE_ROWS and grid[row][col] == null:
-			empty_below += 1
-			row += 1
-		max_drop = min(max_drop, empty_below)
-	return max(max_drop, 0)
-
-func _move_garbage_block(g: GarbageBlock, drop: int) -> void:
-	for col in range(g.origin.x, g.origin.x + g.width):
-		for row in range(g.origin.y, g.origin.y + g.height):
-			grid[row][col] = null
-	g.origin.y += drop
-	for col in range(g.origin.x, g.origin.x + g.width):
-		for row in range(g.origin.y, g.origin.y + g.height):
-			grid[row][col] = g
 
 func _find_matches() -> Array:
 	var matched := {}

@@ -38,15 +38,6 @@ func play_swap(target_pos: Vector2, duration: float) -> void:
 	squash.tween_property(self, "scale", Vector2(1.15, 0.85), duration * 0.5)
 	squash.tween_property(self, "scale", Vector2(1, 1), duration * 0.5)
 
-func play_fall(target_pos: Vector2, duration: float) -> void:
-	state = State.FALLING
-	var tween := create_tween()
-	tween.tween_property(self, "position", target_pos, duration)
-	tween.finished.connect(func():
-		state = State.IDLE
-		play_land_squash()
-	)
-
 func play_land_squash() -> void:
 	var tween := create_tween()
 	tween.tween_property(self, "scale", Vector2(1.25, 0.75), 0.05)

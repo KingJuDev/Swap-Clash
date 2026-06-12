@@ -43,10 +43,10 @@ func _process(_delta: float) -> bool:
 			board.grid[10][col] = board._spawn_block(0, 10, col)
 
 		board.garbage_sent.connect(func(pieces: Array): _emitted.append(pieces))
-		board._resolve_matches()
 
-		# garbage_sent must not fire synchronously (before the first await):
-		# combo of 3, no chain bonus -> nothing emitted yet.
+		# Trigger match detection directly: combo of 3, no chain bonus ->
+		# nothing emitted for this match (combo < 4, chain_max < 2).
+		board._check_matches()
 		assert(_emitted.is_empty())
 
 		_start_time_ms = Time.get_ticks_msec()

@@ -34,12 +34,6 @@ func _draw() -> void:
 		draw_line(Vector2(0, r * _cell_size), Vector2(width * _cell_size, r * _cell_size), GRID_LINE_COLOR, 1.0)
 	NeonTheme.draw_glow_rect_outline(self, rect, GLOW_COLOR, 3, 3.0)
 
-func play_fall(target_pos: Vector2, duration: float) -> void:
-	state = State.FALLING
-	var tween := create_tween()
-	tween.tween_property(self, "position", target_pos, duration)
-	tween.finished.connect(func(): state = State.IDLE)
-
 func play_match_flash() -> void:
 	state = State.FLASHING
 	var tween := create_tween()

@@ -35,9 +35,16 @@ func _process(_delta: float) -> bool:
 				g = board.grid[row][col]
 
 	assert(g != null)
+	assert(g.state == GarbageBlock.State.FLOATING)
+
 	# The board is otherwise empty, so the garbage should fall on its own
 	# (without the player swapping) to rest on the floor.
+	var delta := 1.0 / 60.0
+	for i in range(300):
+		board._advance_simulation(delta)
+
 	assert(g.origin.y == board.VISIBLE_ROWS - g.height)
+	assert(g.state == GarbageBlock.State.IDLE)
 
 	print("ALL TESTS PASSED")
 	quit()
