@@ -236,9 +236,14 @@ func _try_swap() -> void:
 
 func _check_matches() -> void:
 	var matches := _find_matches()
-	if matches.is_empty():
-		for b in _landed_this_frame:
+	var matched_set := {}
+	for pos in matches:
+		matched_set[pos] = true
+	for b in _landed_this_frame:
+		if not matched_set.has(b.grid_pos):
 			b.from_chain = false
+
+	if matches.is_empty():
 		return
 
 	var is_chain_link := false
