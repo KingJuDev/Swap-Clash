@@ -408,9 +408,17 @@ func _check_block_floating(b: Block) -> void:
 	var row := b.grid_pos.y
 	if row >= VISIBLE_ROWS - 1:
 		return
-	if grid[row + 1][col] == null:
+	var below: Variant = grid[row + 1][col]
+	if below == null:
 		b.state = Block.State.FLOATING
 		b.float_timer = FLOAT_DELAY
+		b.from_chain = true
+	elif below is Block and (below.state == Block.State.FLOATING or below.state == Block.State.FALLING):
+		# The block underneath is already moving: float in sync with it so the
+		# whole column drops together instead of one block at a time. _update_blocks
+		# runs bottom-to-top, so `below` has already transitioned this frame.
+		b.state = Block.State.FLOATING
+		b.float_timer = below.float_timer
 		b.from_chain = true
 
 func _update_falling_block(b: Block, delta: float) -> void:
@@ -419,7 +427,14 @@ func _update_falling_block(b: Block, delta: float) -> void:
 	b.position.y += FALL_SPEED * delta
 	while true:
 		var next_row := row + 1
-		var blocked := next_row >= VISIBLE_ROWS or grid[next_row][col] != null
+		var below: Variant = null if next_row >= VISIBLE_ROWS else grid[next_row][col]
+		# A block below that is itself moving doesn't stop us: we ride one cell
+		# above it so the column falls as a unit, and only land on a static
+		# obstacle (the floor, an idle block, or garbage).
+		if below is Block and (below.state == Block.State.FLOATING or below.state == Block.State.FALLING):
+			b.position.y = minf(b.position.y, below.position.y - CELL_SIZE)
+			break
+		var blocked := next_row >= VISIBLE_ROWS or below != null
 		if blocked:
 			var floor_y: float = row * CELL_SIZE - rise_offset
 			if b.position.y >= floor_y:
