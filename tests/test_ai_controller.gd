@@ -8,6 +8,10 @@ var _frame := 0
 var _target_col := 0
 
 func _initialize() -> void:
+	# The expert controller routes planning through the cascade brain.
+	assert(AIController.new("expert").difficulty["chains"] == true)
+	assert(AIController.new("difficile").difficulty["chains"] == false)
+
 	_board = BoardScene.instantiate()
 	_board.input_source = "ai"
 	_board.ai = AIController.new("difficile")
