@@ -11,13 +11,17 @@ config_version=5
 [application]
 
 config/name="Swap & Clash"
-run/main_scene="res://scenes/SetupMenu.tscn"
+run/main_scene="res://scenes/MainMenu.tscn"
 config/features=PackedStringArray("4.6")
 
 [display]
 
 window/size/viewport_width=920
 window/size/viewport_height=800
+window/size/window_width_override=1600
+window/size/window_height_override=900
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
 
 [autoload]
 
