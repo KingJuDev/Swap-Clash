@@ -47,8 +47,11 @@ const SHAKE_COMBO_THRESHOLD := 5
 
 const JOY_AXIS_DEADZONE := 0.5
 
-@export_enum("gamepad", "keyboard") var input_source: String = "gamepad"
+@export_enum("gamepad", "keyboard", "ai") var input_source: String = "gamepad"
 @export var keyboard_scheme: int = 1
+
+# Set when input_source == "ai"; drives the cursor via virtual button presses.
+var ai: AIController = null
 
 const KEYBOARD_SCHEME_1 := {
 	"left": KEY_A,
@@ -128,6 +131,8 @@ func _draw() -> void:
 func _process(delta: float) -> void:
 	if game_over_flag:
 		return
+	if input_source == "ai" and ai != null:
+		ai.update(self, delta)
 	_update_incoming_garbage()
 	_handle_cursor_movement(delta)
 
@@ -187,18 +192,24 @@ func _handle_cursor_movement(delta: float) -> void:
 			_key_held_time[dir_name] = -1.0
 
 func _is_swap_pressed() -> bool:
+	if input_source == "ai":
+		return ai != null and ai.buttons["swap"]
 	if input_source == "keyboard":
 		var keycode := _keyboard_keys()["swap"] as Key
 		return Input.is_physical_key_pressed(keycode)
 	return Input.is_joy_button_pressed(input_device, JOY_BUTTON_A)
 
 func _is_fast_rise_pressed() -> bool:
+	if input_source == "ai":
+		return ai != null and ai.buttons["fast_rise"]
 	if input_source == "keyboard":
 		var keycode := _keyboard_keys()["fast_rise"] as Key
 		return Input.is_physical_key_pressed(keycode)
 	return Input.is_joy_button_pressed(input_device, JOY_BUTTON_B)
 
 func _is_direction_pressed(dir_name: String) -> bool:
+	if input_source == "ai":
+		return ai != null and ai.buttons[dir_name]
 	if input_source == "keyboard":
 		var keycode := _keyboard_keys()[dir_name] as Key
 		return Input.is_physical_key_pressed(keycode)

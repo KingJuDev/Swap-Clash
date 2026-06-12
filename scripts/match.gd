@@ -12,14 +12,21 @@ extends Node2D
 @onready var end_label: Label = $EndPanel/EndLabel
 @onready var restart_button: Button = $EndPanel/RestartButton
 
+var _vs_cpu := false
+
 func _ready() -> void:
 	var config: Node = get_node("/root/GameConfig")
+	_vs_cpu = config.vs_cpu
 	board1.input_source = config.player1_source
 	board1.input_device = config.player1_device
 	board1.keyboard_scheme = 1
 
-	board2.input_source = config.player2_source
-	board2.input_device = config.player2_device
+	if config.vs_cpu:
+		board2.input_source = "ai"
+		board2.ai = AIController.new(config.cpu_difficulty)
+	else:
+		board2.input_source = config.player2_source
+		board2.input_device = config.player2_device
 	board2.keyboard_scheme = 2
 
 	board1.score_changed.connect(func(s: int): score_label1.text = "Score: %d" % s)
@@ -44,5 +51,8 @@ func _process(_delta: float) -> void:
 func _on_game_over(winner: int) -> void:
 	board1.set_process(false)
 	board2.set_process(false)
-	end_label.text = "Joueur %d gagne !" % winner
+	if _vs_cpu:
+		end_label.text = "Vous gagnez !" if winner == 1 else "L'ordinateur gagne !"
+	else:
+		end_label.text = "Joueur %d gagne !" % winner
 	end_panel.visible = true
