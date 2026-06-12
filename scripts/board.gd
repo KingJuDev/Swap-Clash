@@ -74,6 +74,7 @@ var rise_offset := 0.0
 var score := 0
 var chain_count := 0
 var chain_max := 0
+var combo_max := 0
 var is_resolving := false
 var game_over_flag := false
 var incoming_garbage: Array = []
@@ -211,6 +212,76 @@ func _try_swap() -> void:
 	await _apply_gravity()
 	await _resolve_matches()
 	is_resolving = false
+
+func _check_matches() -> void:
+	var matches := _find_matches()
+	if matches.is_empty():
+		for b in _landed_this_frame:
+			b.from_chain = false
+		return
+
+	var is_chain_link := false
+	for pos in matches:
+		if grid[pos.y][pos.x].from_chain:
+			is_chain_link = true
+			break
+
+	if is_chain_link:
+		chain_count += 1
+	else:
+		chain_count = 1
+	chain_max = max(chain_max, chain_count)
+
+	var combo_size := matches.size()
+	combo_max = max(combo_max, combo_size)
+	score += _score_for(combo_size, chain_count)
+	score_changed.emit(score)
+	if chain_count > 1:
+		chain_updated.emit(chain_count)
+
+	if chain_count >= SHAKE_CHAIN_THRESHOLD or combo_size >= SHAKE_COMBO_THRESHOLD:
+		shake()
+
+	if combo_size >= 4:
+		garbage_sent.emit(_garbage_combo_pieces(combo_size))
+
+	var to_shatter := {}
+	for pos in matches:
+		var p: Vector2i = pos
+		for dir in [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]:
+			var n: Vector2i = p + dir
+			if n.x < 0 or n.x >= GRID_WIDTH or n.y < 0 or n.y >= VISIBLE_ROWS:
+				continue
+			var cell: Variant = grid[n.y][n.x]
+			if cell is GarbageBlock:
+				to_shatter[cell] = true
+
+	for pos in matches:
+		var b: Variant = grid[pos.y][pos.x]
+		b.state_timer = FLASH_DURATION
+		b.play_match_flash()
+
+	for g in to_shatter.keys():
+		_convert_garbage_block(g)
+
+func _is_board_settled() -> bool:
+	for row in range(VISIBLE_ROWS):
+		for col in range(GRID_WIDTH):
+			var cell: Variant = grid[row][col]
+			if cell is Block and cell.state != Block.State.IDLE:
+				return false
+			if cell is GarbageBlock and cell.state != GarbageBlock.State.IDLE:
+				return false
+	return _find_matches().is_empty()
+
+func _end_chain() -> void:
+	if chain_max >= 2:
+		var h: int = min(chain_max - 1, MAX_GARBAGE_HEIGHT)
+		garbage_sent.emit([{"w": GRID_WIDTH, "h": h}])
+
+	chain_count = 0
+	chain_max = 0
+	combo_max = 0
 
 func _resolve_matches() -> void:
 	var matches := _find_matches()
