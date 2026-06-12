@@ -248,7 +248,7 @@ func _check_matches() -> void:
 			if n.x < 0 or n.x >= GRID_WIDTH or n.y < 0 or n.y >= VISIBLE_ROWS:
 				continue
 			var cell: Variant = grid[n.y][n.x]
-			if cell is GarbageBlock:
+			if cell is GarbageBlock and cell.state == GarbageBlock.State.IDLE:
 				to_shatter[cell] = true
 
 	for pos in matches:
