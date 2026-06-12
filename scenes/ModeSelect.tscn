@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://scripts/mode_select.gd" id="1"]
 [ext_resource type="Theme" path="res://resources/theme/neon_theme.tres" id="2"]
-[ext_resource type="Script" path="res://scripts/board_background.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/menu_background.gd" id="3"]
 
 [node name="ModeSelect" type="Node2D"]
 script = ExtResource("1")
