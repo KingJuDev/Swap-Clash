@@ -54,7 +54,7 @@ func _replan(board: Object) -> void:
 	if randf() < difficulty["mistake_chance"]:
 		_plan = _random_legal(snapshot)
 	else:
-		var swap := AIBrain.best_swap(snapshot)
+		var swap := AIBrain.best_swap_chain(snapshot) if difficulty.get("chains", false) else AIBrain.best_swap(snapshot)
 		_plan = {"row": swap["row"], "col": swap["col"]} if not swap.is_empty() else {}
 
 func _snapshot(board: Object) -> Array:

@@ -25,32 +25,40 @@ text = "Difficulté"
 
 [node name="EasyButton" type="Button" parent="."]
 offset_left = 310.0
-offset_top = 300.0
+offset_top = 280.0
 offset_right = 610.0
-offset_bottom = 350.0
+offset_bottom = 330.0
 theme_override_font_sizes/font_size = 24
 text = "Facile"
 
 [node name="MediumButton" type="Button" parent="."]
 offset_left = 310.0
-offset_top = 370.0
+offset_top = 345.0
 offset_right = 610.0
-offset_bottom = 420.0
+offset_bottom = 395.0
 theme_override_font_sizes/font_size = 24
 text = "Moyen"
 
 [node name="HardButton" type="Button" parent="."]
 offset_left = 310.0
-offset_top = 440.0
+offset_top = 410.0
 offset_right = 610.0
-offset_bottom = 490.0
+offset_bottom = 460.0
 theme_override_font_sizes/font_size = 24
 text = "Difficile"
 
+[node name="ExpertButton" type="Button" parent="."]
+offset_left = 310.0
+offset_top = 475.0
+offset_right = 610.0
+offset_bottom = 525.0
+theme_override_font_sizes/font_size = 24
+text = "Expert"
+
 [node name="BackButton" type="Button" parent="."]
 offset_left = 310.0
-offset_top = 560.0
+offset_top = 575.0
 offset_right = 610.0
-offset_bottom = 610.0
+offset_bottom = 625.0
 theme_override_font_sizes/font_size = 24
 text = "Retour"

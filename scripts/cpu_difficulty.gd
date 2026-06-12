@@ -3,12 +3,14 @@ extends Node2D
 @onready var easy_button: Button = $EasyButton
 @onready var medium_button: Button = $MediumButton
 @onready var hard_button: Button = $HardButton
+@onready var expert_button: Button = $ExpertButton
 @onready var back_button: Button = $BackButton
 
 func _ready() -> void:
 	easy_button.pressed.connect(_start.bind("facile"))
 	medium_button.pressed.connect(_start.bind("moyen"))
 	hard_button.pressed.connect(_start.bind("difficile"))
+	expert_button.pressed.connect(_start.bind("expert"))
 	back_button.pressed.connect(func(): get_tree().change_scene_to_file("res://scenes/ModeSelect.tscn"))
 
 func _start(difficulty: String) -> void:
