@@ -69,6 +69,13 @@ const KEYBOARD_SCHEME_2 := {
 }
 
 func _keyboard_keys() -> Dictionary:
+	# Prefer the player's remapped bindings from GameConfig when available;
+	# fall back to the canonical hardcoded schemes otherwise (e.g. headless tests).
+	var config := get_node_or_null("/root/GameConfig")
+	if config != null:
+		var keys: Dictionary = config.player2_keys if keyboard_scheme == 2 else config.player1_keys
+		if not keys.is_empty():
+			return keys
 	return KEYBOARD_SCHEME_2 if keyboard_scheme == 2 else KEYBOARD_SCHEME_1
 
 @onready var cursor_node: ColorRect = $Cursor
