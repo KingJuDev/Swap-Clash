@@ -36,6 +36,10 @@ var player2_keys: Dictionary = DEFAULT_KEYS_2.duplicate()
 var resolution: Vector2i = Vector2i(1600, 900)
 var fullscreen: bool = false
 
+# vs_cpu is set per launch (not persisted); cpu_difficulty is a saved preference.
+var vs_cpu: bool = false
+var cpu_difficulty: String = "moyen"
+
 func _ready() -> void:
 	load_settings()
 	apply_display()
@@ -60,6 +64,7 @@ func save_settings() -> void:
 	cfg.set_value("display", "resolution_x", resolution.x)
 	cfg.set_value("display", "resolution_y", resolution.y)
 	cfg.set_value("display", "fullscreen", fullscreen)
+	cfg.set_value("game", "cpu_difficulty", cpu_difficulty)
 	cfg.set_value("input", "player1_source", player1_source)
 	cfg.set_value("input", "player1_device", player1_device)
 	cfg.set_value("input", "player2_source", player2_source)
@@ -77,6 +82,7 @@ func load_settings() -> void:
 		cfg.get_value("display", "resolution_y", resolution.y)
 	)
 	fullscreen = cfg.get_value("display", "fullscreen", fullscreen)
+	cpu_difficulty = cfg.get_value("game", "cpu_difficulty", cpu_difficulty)
 	player1_source = cfg.get_value("input", "player1_source", player1_source)
 	player1_device = cfg.get_value("input", "player1_device", player1_device)
 	player2_source = cfg.get_value("input", "player2_source", player2_source)
