@@ -283,6 +283,13 @@ func _end_chain() -> void:
 	chain_max = 0
 	combo_max = 0
 
+func _advance_simulation(delta: float) -> void:
+	_update_blocks(delta)
+	_update_garbage_blocks(delta)
+	_check_matches()
+	if _is_board_settled() and chain_max > 0:
+		_end_chain()
+
 func _resolve_matches() -> void:
 	var matches := _find_matches()
 	if matches.is_empty():
