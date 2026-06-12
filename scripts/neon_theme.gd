@@ -106,7 +106,7 @@ const CHAIN_LABEL_DURATION := 1.0
 ## color escalation from yellow (low chains) to magenta (high chains), then
 ## clears the label after CHAIN_LABEL_DURATION (unless it changed again).
 static func animate_chain_label(label: Label, chain: int) -> void:
-	var label_text := "Chain x%d!" % chain
+	var label_text := "Chain x%d!" % chain if chain <= 13 else "Chain x?!"
 	label.text = label_text
 	var t := clampf(float(chain - 2) / 6.0, 0.0, 1.0)
 	label.modulate = Color.YELLOW.lerp(Color.MAGENTA, t)

@@ -1,7 +1,7 @@
 class_name GarbageBlock
 extends ColorRect
 
-enum State { IDLE, FALLING, FLASHING }
+enum State { IDLE, FLOATING, FALLING, FLASHING }
 
 const GARBAGE_COLOR := Color(0.4, 0.4, 0.4)
 const GRID_LINE_COLOR := Color(0.05, 0.05, 0.08, 0.6)
@@ -12,6 +12,7 @@ var width: int = 1
 var height: int = 1
 var origin: Vector2i = Vector2i.ZERO
 var state: State = State.IDLE
+var float_timer: float = 0.0
 
 var _cell_size: int = 64
 
@@ -32,12 +33,6 @@ func _draw() -> void:
 	for r in range(1, height):
 		draw_line(Vector2(0, r * _cell_size), Vector2(width * _cell_size, r * _cell_size), GRID_LINE_COLOR, 1.0)
 	NeonTheme.draw_glow_rect_outline(self, rect, GLOW_COLOR, 3, 3.0)
-
-func play_fall(target_pos: Vector2, duration: float) -> void:
-	state = State.FALLING
-	var tween := create_tween()
-	tween.tween_property(self, "position", target_pos, duration)
-	tween.finished.connect(func(): state = State.IDLE)
 
 func play_match_flash() -> void:
 	state = State.FLASHING

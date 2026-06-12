@@ -30,13 +30,11 @@ func _process(_delta: float) -> bool:
 	assert(m.board2.keyboard_scheme == 2)
 
 	# garbage_sent on one board routes to receive_garbage on the other.
-	m.board1.garbage_sent.emit(5)
-	assert(m.board2.pending_garbage.size() == 1)
-	assert(m.board2.pending_garbage[0].power == 5)
+	m.board1.garbage_sent.emit([{"w": 5, "h": 1}])
+	assert(m.board2.incoming_garbage == [{"w": 5, "h": 1}])
 
-	m.board2.garbage_sent.emit(3)
-	assert(m.board1.pending_garbage.size() == 1)
-	assert(m.board1.pending_garbage[0].power == 3)
+	m.board2.garbage_sent.emit([{"w": 3, "h": 1}])
+	assert(m.board1.incoming_garbage == [{"w": 3, "h": 1}])
 
 	# game_over on board1 means player 2 wins.
 	m.board1.game_over.emit()

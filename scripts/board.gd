@@ -3,7 +3,7 @@ extends Node2D
 signal score_changed(new_score: int)
 signal chain_updated(chain: int)
 signal game_over
-signal garbage_sent(power: int)
+signal garbage_sent(pieces: Array)
 
 const BlockScene := preload("res://scenes/Block.tscn")
 const GarbageBlockScene := preload("res://scenes/GarbageBlock.tscn")
@@ -18,15 +18,27 @@ const SWAP_DURATION := 0.08
 const FALL_DURATION_PER_CELL := 0.06
 const FLASH_DURATION := 0.32
 const CLEAR_DURATION := 0.15
+const CONVERSION_FLASH_DURATION := 0.6
+const CONVERSION_DURATION_PER_LAYER := 1.0
+const FLOAT_DELAY := 0.2
+const FALL_SPEED: float = CELL_SIZE / FALL_DURATION_PER_CELL
+
+const STOP_BASE := 0.5
+const STOP_PER_CHAIN_LINK := 0.3
+const STOP_PER_COMBO_EXTRA := 0.1
+const STOP_MAX := 5.0
+const DANGER_ZONE_ROWS := 1
+const DANGER_ZONE_STOP_MULTIPLIER := 3.0
 
 const RISE_SPEED_NORMAL := 6.0
 const RISE_SPEED_FAST := 60.0
 const MOVE_REPEAT_DELAY := 0.25
 const MOVE_REPEAT_RATE := 0.06
-const TELEGRAPH_DURATION := 2.0
 const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1
 
 const BOARD_FRAME_COLOR := Color(0.3, 0.7, 1.0)
+const DANGER_FRAME_COLOR := Color(1.0, 0.15, 0.15)
+const DANGER_PULSE_SPEED := 6.0
 
 const SHAKE_CHAIN_THRESHOLD := 3
 const SHAKE_COMBO_THRESHOLD := 5
@@ -68,11 +80,15 @@ var grid: Array = []
 # cursor_pos.x = left column of the 2-wide cursor, cursor_pos.y = row.
 var cursor_pos := Vector2i(GRID_WIDTH / 2 - 1, VISIBLE_ROWS - 1)
 var rise_offset := 0.0
+var _danger_pulse_t := 0.0
 var score := 0
 var chain_count := 0
-var is_resolving := false
+var chain_max := 0
+var combo_max := 0
+var stop_timer := 0.0
 var game_over_flag := false
-var pending_garbage: Array = []
+var incoming_garbage: Array = []
+var _landed_this_frame: Array = []
 
 var _swap_was_pressed := false
 var _key_held_time := {}
@@ -96,29 +112,46 @@ func _ready() -> void:
 
 func _draw() -> void:
 	var rect := Rect2(Vector2.ZERO, Vector2(GRID_WIDTH * CELL_SIZE, VISIBLE_ROWS * CELL_SIZE))
-	NeonTheme.draw_glow_rect_outline(self, rect, BOARD_FRAME_COLOR, 4, 3.0)
+	var frame_color := BOARD_FRAME_COLOR
+	if _is_in_danger_zone():
+		var pulse := (sin(_danger_pulse_t) + 1.0) / 2.0
+		frame_color = BOARD_FRAME_COLOR.lerp(DANGER_FRAME_COLOR, pulse)
+	NeonTheme.draw_glow_rect_outline(self, rect, frame_color, 4, 3.0)
 
 func _process(delta: float) -> void:
 	if game_over_flag:
 		return
-	_update_garbage_queue(delta)
+	_update_incoming_garbage()
 	_handle_cursor_movement(delta)
 
 	var swap_pressed := _is_swap_pressed()
-	if swap_pressed and not _swap_was_pressed and not is_resolving:
+	if swap_pressed and not _swap_was_pressed:
 		_try_swap()
 	_swap_was_pressed = swap_pressed
 
-	if not is_resolving:
-		var rise_speed := RISE_SPEED_FAST if _is_fast_rise_pressed() else RISE_SPEED_NORMAL
-		rise_offset += rise_speed * delta
-		while rise_offset >= CELL_SIZE:
-			rise_offset -= CELL_SIZE
-			_do_rise_step()
-			if game_over_flag:
-				break
+	_advance_simulation(delta)
+
+	if _is_board_settled():
+		if stop_timer > 0.0:
+			stop_timer = max(0.0, stop_timer - delta)
+			if _is_fast_rise_pressed():
+				stop_timer = 0.0
+		else:
+			var rise_speed := RISE_SPEED_FAST if _is_fast_rise_pressed() else RISE_SPEED_NORMAL
+			rise_offset += rise_speed * delta
+			while rise_offset >= CELL_SIZE:
+				rise_offset -= CELL_SIZE
+				_do_rise_step()
+				if game_over_flag:
+					break
 
 	_update_visuals()
+
+	if _is_in_danger_zone():
+		_danger_pulse_t += delta * DANGER_PULSE_SPEED
+	else:
+		_danger_pulse_t = 0.0
+	queue_redraw()
 
 func _handle_cursor_movement(delta: float) -> void:
 	var dirs := {
@@ -187,7 +220,9 @@ func _try_swap() -> void:
 	var b2: Variant = grid[row][col2]
 	if b1 == null and b2 == null:
 		return
-	if (b1 != null and b1.state != Block.State.IDLE) or (b2 != null and b2.state != Block.State.IDLE):
+	if b1 != null and not (b1 is Block and b1.state == Block.State.IDLE):
+		return
+	if b2 != null and not (b2 is Block and b2.state == Block.State.IDLE):
 		return
 
 	grid[row][col1] = b2
@@ -199,21 +234,32 @@ func _try_swap() -> void:
 		b2.grid_pos = Vector2i(col1, row)
 		b2.play_swap(_cell_position(col1, row), SWAP_DURATION)
 
-	is_resolving = true
-	await get_tree().create_timer(SWAP_DURATION).timeout
-	chain_count = 0
-	await _apply_gravity()
-	await _resolve_matches()
-	is_resolving = false
-
-func _resolve_matches() -> void:
+func _check_matches() -> void:
 	var matches := _find_matches()
+	var matched_set := {}
+	for pos in matches:
+		matched_set[pos] = true
+	for b in _landed_this_frame:
+		if not matched_set.has(b.grid_pos):
+			b.from_chain = false
+
 	if matches.is_empty():
-		chain_count = 0
 		return
 
-	chain_count += 1
+	var is_chain_link := false
+	for pos in matches:
+		if grid[pos.y][pos.x].from_chain:
+			is_chain_link = true
+			break
+
+	if is_chain_link:
+		chain_count += 1
+	else:
+		chain_count = 1
+	chain_max = max(chain_max, chain_count)
+
 	var combo_size := matches.size()
+	combo_max = max(combo_max, combo_size)
 	score += _score_for(combo_size, chain_count)
 	score_changed.emit(score)
 	if chain_count > 1:
@@ -222,9 +268,8 @@ func _resolve_matches() -> void:
 	if chain_count >= SHAKE_CHAIN_THRESHOLD or combo_size >= SHAKE_COMBO_THRESHOLD:
 		shake()
 
-	var power := _garbage_power_for(combo_size, chain_count)
-	if power > 0:
-		_send_garbage(power)
+	if combo_size >= 4:
+		garbage_sent.emit(_garbage_combo_pieces(combo_size))
 
 	var to_shatter := {}
 	for pos in matches:
@@ -234,171 +279,222 @@ func _resolve_matches() -> void:
 			if n.x < 0 or n.x >= GRID_WIDTH or n.y < 0 or n.y >= VISIBLE_ROWS:
 				continue
 			var cell: Variant = grid[n.y][n.x]
-			if cell is GarbageBlock:
+			if cell is GarbageBlock and cell.state == GarbageBlock.State.IDLE:
 				to_shatter[cell] = true
 
 	for pos in matches:
-		grid[pos.y][pos.x].play_match_flash()
-	for g in to_shatter.keys():
-		g.play_match_flash()
-	await get_tree().create_timer(FLASH_DURATION).timeout
-
-	for pos in matches:
-		grid[pos.y][pos.x].play_clear()
-	await get_tree().create_timer(CLEAR_DURATION).timeout
-
-	for pos in matches:
 		var b: Variant = grid[pos.y][pos.x]
-		grid[pos.y][pos.x] = null
-		b.queue_free()
+		b.state_timer = FLASH_DURATION
+		b.play_match_flash()
 
 	for g in to_shatter.keys():
-		_shatter_garbage_bottom_row(g)
+		_convert_garbage_block(g)
 
-	await _apply_gravity()
-	await _resolve_matches()
+func _is_board_settled() -> bool:
+	for row in range(VISIBLE_ROWS):
+		for col in range(GRID_WIDTH):
+			var cell: Variant = grid[row][col]
+			if cell is Block and cell.state != Block.State.IDLE:
+				return false
+			if cell is GarbageBlock and cell.state != GarbageBlock.State.IDLE:
+				return false
+	return _find_matches().is_empty()
 
-func _send_garbage(power: int) -> void:
-	var remaining := power
-	var i := 0
-	while remaining > 0 and i < pending_garbage.size():
-		var item: Dictionary = pending_garbage[i]
-		var cancel: int = min(remaining, item.power)
-		item.power -= cancel
-		remaining -= cancel
-		if item.power <= 0:
-			pending_garbage.remove_at(i)
-		else:
-			pending_garbage[i] = item
-			i += 1
-	if remaining > 0:
-		garbage_sent.emit(remaining)
+func _is_in_danger_zone() -> bool:
+	for row in range(DANGER_ZONE_ROWS):
+		for col in range(GRID_WIDTH):
+			if grid[row][col] != null:
+				return true
+	return false
 
-func receive_garbage(power: int) -> void:
-	var shape := _garbage_shape_for_power(power)
-	var width: int = shape.width
-	var c0: int = randi() % (GRID_WIDTH - width + 1)
-	pending_garbage.append({
-		"power": power,
-		"telegraph_time": TELEGRAPH_DURATION,
-		"columns": Vector2i(c0, shape.width),
-	})
+func _end_chain() -> void:
+	if chain_max >= 2:
+		var h: int = min(chain_max - 1, MAX_GARBAGE_HEIGHT)
+		garbage_sent.emit([{"w": GRID_WIDTH, "h": h}])
 
-func _update_garbage_queue(delta: float) -> void:
-	for i in range(pending_garbage.size()):
-		var item: Dictionary = pending_garbage[i]
-		if item.telegraph_time > 0.0:
-			item.telegraph_time = max(0.0, item.telegraph_time - delta)
-			pending_garbage[i] = item
+	var duration: float = STOP_BASE \
+		+ STOP_PER_CHAIN_LINK * (chain_max - 1) \
+		+ STOP_PER_COMBO_EXTRA * max(0, combo_max - 3)
+	duration = min(duration, STOP_MAX)
+	if _is_in_danger_zone():
+		duration *= DANGER_ZONE_STOP_MULTIPLIER
+	stop_timer = max(stop_timer, duration)
 
-	if pending_garbage.is_empty() or is_resolving:
+	chain_count = 0
+	chain_max = 0
+	combo_max = 0
+
+func _advance_simulation(delta: float) -> void:
+	_update_blocks(delta)
+	_update_garbage_blocks(delta)
+	_check_matches()
+	if _is_board_settled() and chain_max > 0:
+		_end_chain()
+
+func receive_garbage(pieces: Array) -> void:
+	for piece in pieces:
+		incoming_garbage.append(piece)
+
+func _update_incoming_garbage() -> void:
+	if incoming_garbage.is_empty():
 		return
-
-	var item: Dictionary = pending_garbage[0]
-	if item.telegraph_time > 0.0:
-		return
-
-	var shape := _garbage_shape_for_power(item.power)
-	var c0: int = clampi(item.columns.x, 0, GRID_WIDTH - shape.width)
-
-	for row in range(shape.height):
-		for col in range(c0, c0 + shape.width):
+	var piece: Dictionary = incoming_garbage[0]
+	var w: int = piece.w
+	var h: int = piece.h
+	var c0: int = 0 if w >= GRID_WIDTH else randi() % (GRID_WIDTH - w + 1)
+	for row in range(h):
+		for col in range(c0, c0 + w):
 			if grid[row][col] != null:
 				return
+	var g := _spawn_garbage_block(Vector2i(c0, 0), w, h)
+	g.state = GarbageBlock.State.FLOATING
+	g.float_timer = FLOAT_DELAY
+	incoming_garbage.remove_at(0)
 
-	_spawn_garbage_block(Vector2i(c0, 0), shape.width, shape.height)
-	pending_garbage.remove_at(0)
-	_settle_after_garbage_arrival()
+func _convert_garbage_block(g: GarbageBlock) -> void:
+	g.state = GarbageBlock.State.FLASHING
+	g.play_match_flash()
+	await get_tree().create_timer(CONVERSION_FLASH_DURATION).timeout
+	while g.height > 0:
+		var bottom_row := g.origin.y + g.height - 1
+		for col in range(g.origin.x, g.origin.x + g.width):
+			var b := _spawn_block(randi() % NUM_COLORS, bottom_row, col)
+			b.state = Block.State.FLOATING
+			b.from_chain = true
+			b.float_timer = FLOAT_DELAY
+			grid[bottom_row][col] = b
+		g.play_shatter_row(g.height - 1, CELL_SIZE)
+		g.height -= 1
+		var fully_converted := g.height <= 0
+		if fully_converted:
+			g.queue_free()
+		else:
+			g.shrink_to(g.height, CELL_SIZE)
+			g.state = GarbageBlock.State.FLASHING
+		await get_tree().create_timer(CONVERSION_DURATION_PER_LAYER).timeout
+		if fully_converted:
+			break
 
-## Newly-arrived garbage spawns at the top of the board; without this it
-## would float there until the player's next swap triggered gravity.
-func _settle_after_garbage_arrival() -> void:
-	is_resolving = true
-	await _apply_gravity()
-	is_resolving = false
+func _check_block_floating(b: Block) -> void:
+	var col := b.grid_pos.x
+	var row := b.grid_pos.y
+	if row >= VISIBLE_ROWS - 1:
+		return
+	if grid[row + 1][col] == null:
+		b.state = Block.State.FLOATING
+		b.float_timer = FLOAT_DELAY
+		b.from_chain = true
 
-func _shatter_garbage_bottom_row(g: GarbageBlock) -> void:
-	var bottom_row := g.origin.y + g.height - 1
-	for col in range(g.origin.x, g.origin.x + g.width):
-		grid[bottom_row][col] = _spawn_block(randi() % NUM_COLORS, bottom_row, col)
-	g.play_shatter_row(g.height - 1, CELL_SIZE)
-	g.height -= 1
-	if g.height <= 0:
-		g.queue_free()
-	else:
-		g.shrink_to(g.height, CELL_SIZE)
-
-func _apply_gravity() -> void:
-	var start_pos := {}
-	var any_moved := true
-	while any_moved:
-		any_moved = false
-
-		# Compact normal blocks within each column, segment by segment
-		# (a GarbageBlock cell acts as a solid floor for the segment above it).
-		for col in range(GRID_WIDTH):
-			var write_row := VISIBLE_ROWS - 1
-			for row in range(VISIBLE_ROWS - 1, -1, -1):
-				var cell: Variant = grid[row][col]
-				if cell is GarbageBlock:
-					write_row = row - 1
-					continue
-				if cell != null:
-					if not start_pos.has(cell):
-						start_pos[cell] = cell.grid_pos
-					if write_row != row:
-						grid[write_row][col] = cell
-						grid[row][col] = null
-						cell.grid_pos = Vector2i(col, write_row)
-						any_moved = true
-					write_row -= 1
-
-		# Move garbage blocks down as units, by the smallest empty gap under
-		# any of the columns they cover.
-		var processed := {}
-		for row in range(VISIBLE_ROWS - 1, -1, -1):
-			for col in range(GRID_WIDTH):
-				var cell: Variant = grid[row][col]
-				if cell is GarbageBlock and not processed.has(cell):
-					processed[cell] = true
-					if not start_pos.has(cell):
-						start_pos[cell] = cell.origin
-					var drop := _garbage_drop_distance(cell)
-					if drop > 0:
-						_move_garbage_block(cell, drop)
-						any_moved = true
-
-	var any_falling := false
-	for cell in start_pos.keys():
-		var start: Vector2i = start_pos[cell]
-		var end: Vector2i = cell.grid_pos if cell is Block else cell.origin
-		var dist := end.y - start.y
-		if dist > 0:
-			cell.play_fall(_cell_position(end.x, end.y), FALL_DURATION_PER_CELL * dist)
-			any_falling = true
-	if any_falling:
-		await get_tree().create_timer(FALL_DURATION_PER_CELL * VISIBLE_ROWS).timeout
-
-func _garbage_drop_distance(g: GarbageBlock) -> int:
-	var bottom_row := g.origin.y + g.height - 1
-	var max_drop := VISIBLE_ROWS
-	for col in range(g.origin.x, g.origin.x + g.width):
-		var empty_below := 0
-		var row := bottom_row + 1
-		while row < VISIBLE_ROWS and grid[row][col] == null:
-			empty_below += 1
-			row += 1
-		max_drop = min(max_drop, empty_below)
-	return max(max_drop, 0)
-
-func _move_garbage_block(g: GarbageBlock, drop: int) -> void:
-	for col in range(g.origin.x, g.origin.x + g.width):
-		for row in range(g.origin.y, g.origin.y + g.height):
+func _update_falling_block(b: Block, delta: float) -> void:
+	var col := b.grid_pos.x
+	var row := b.grid_pos.y
+	b.position.y += FALL_SPEED * delta
+	while true:
+		var next_row := row + 1
+		var blocked := next_row >= VISIBLE_ROWS or grid[next_row][col] != null
+		if blocked:
+			var floor_y: float = row * CELL_SIZE - rise_offset
+			if b.position.y >= floor_y:
+				b.position.y = floor_y
+				b.grid_pos = Vector2i(col, row)
+				b.state = Block.State.IDLE
+				b.play_land_squash()
+				_landed_this_frame.append(b)
+			break
+		var next_y: float = next_row * CELL_SIZE - rise_offset
+		if b.position.y >= next_y:
 			grid[row][col] = null
-	g.origin.y += drop
+			grid[next_row][col] = b
+			row = next_row
+			b.grid_pos = Vector2i(col, row)
+		else:
+			break
+
+func _update_blocks(delta: float) -> void:
+	_landed_this_frame.clear()
+	for row in range(VISIBLE_ROWS - 1, -1, -1):
+		for col in range(GRID_WIDTH):
+			var b: Variant = grid[row][col]
+			if not (b is Block):
+				continue
+			match b.state:
+				Block.State.IDLE:
+					_check_block_floating(b)
+				Block.State.FLOATING:
+					b.float_timer -= delta
+					if b.float_timer <= 0.0:
+						b.state = Block.State.FALLING
+				Block.State.FALLING:
+					_update_falling_block(b, delta)
+				Block.State.MATCHED:
+					b.state_timer -= delta
+					if b.state_timer <= 0.0:
+						b.play_clear()
+						b.state_timer = CLEAR_DURATION
+				Block.State.CLEARING:
+					b.state_timer -= delta
+					if b.state_timer <= 0.0:
+						grid[row][col] = null
+						b.queue_free()
+
+func _check_garbage_floating(g: GarbageBlock) -> void:
+	var bottom_row := g.origin.y + g.height - 1
+	if bottom_row >= VISIBLE_ROWS - 1:
+		return
 	for col in range(g.origin.x, g.origin.x + g.width):
-		for row in range(g.origin.y, g.origin.y + g.height):
-			grid[row][col] = g
+		if grid[bottom_row + 1][col] == null:
+			g.state = GarbageBlock.State.FLOATING
+			g.float_timer = FLOAT_DELAY
+			return
+
+func _update_falling_garbage(g: GarbageBlock, delta: float) -> void:
+	g.position.y += FALL_SPEED * delta
+	while true:
+		var bottom_row := g.origin.y + g.height - 1
+		var next_row := bottom_row + 1
+		var blocked := next_row >= VISIBLE_ROWS
+		if not blocked:
+			for col in range(g.origin.x, g.origin.x + g.width):
+				if grid[next_row][col] != null:
+					blocked = true
+					break
+		if blocked:
+			var floor_y: float = g.origin.y * CELL_SIZE - rise_offset
+			if g.position.y >= floor_y:
+				g.position.y = floor_y
+				g.state = GarbageBlock.State.IDLE
+			break
+		var next_y: float = (g.origin.y + 1) * CELL_SIZE - rise_offset
+		if g.position.y >= next_y:
+			for col in range(g.origin.x, g.origin.x + g.width):
+				for row in range(g.origin.y, g.origin.y + g.height):
+					grid[row][col] = null
+			g.origin.y += 1
+			for col in range(g.origin.x, g.origin.x + g.width):
+				for row in range(g.origin.y, g.origin.y + g.height):
+					grid[row][col] = g
+		else:
+			break
+
+func _update_garbage_blocks(delta: float) -> void:
+	var processed := {}
+	for row in range(VISIBLE_ROWS - 1, -1, -1):
+		for col in range(GRID_WIDTH):
+			var g: Variant = grid[row][col]
+			if not (g is GarbageBlock) or processed.has(g):
+				continue
+			processed[g] = true
+			match g.state:
+				GarbageBlock.State.IDLE:
+					_check_garbage_floating(g)
+				GarbageBlock.State.FLOATING:
+					g.float_timer -= delta
+					if g.float_timer <= 0.0:
+						g.state = GarbageBlock.State.FALLING
+				GarbageBlock.State.FALLING:
+					_update_falling_garbage(g, delta)
+				GarbageBlock.State.FLASHING:
+					pass
 
 func _find_matches() -> Array:
 	var matched := {}
@@ -407,11 +503,11 @@ func _find_matches() -> Array:
 		var col := 0
 		while col < GRID_WIDTH:
 			var b: Variant = grid[row][col]
-			if not (b is Block):
+			if not (b is Block) or b.state != Block.State.IDLE:
 				col += 1
 				continue
 			var run_end := col + 1
-			while run_end < GRID_WIDTH and grid[row][run_end] is Block and grid[row][run_end].color_id == b.color_id:
+			while run_end < GRID_WIDTH and grid[row][run_end] is Block and grid[row][run_end].state == Block.State.IDLE and grid[row][run_end].color_id == b.color_id:
 				run_end += 1
 			if run_end - col >= 3:
 				for c in range(col, run_end):
@@ -422,11 +518,11 @@ func _find_matches() -> Array:
 		var row := 0
 		while row < VISIBLE_ROWS:
 			var b: Variant = grid[row][col]
-			if not (b is Block):
+			if not (b is Block) or b.state != Block.State.IDLE:
 				row += 1
 				continue
 			var run_end := row + 1
-			while run_end < VISIBLE_ROWS and grid[run_end][col] is Block and grid[run_end][col].color_id == b.color_id:
+			while run_end < VISIBLE_ROWS and grid[run_end][col] is Block and grid[run_end][col].state == Block.State.IDLE and grid[run_end][col].color_id == b.color_id:
 				run_end += 1
 			if run_end - row >= 3:
 				for r in range(row, run_end):
@@ -441,22 +537,18 @@ func _score_for(combo_size: int, chain: int) -> int:
 		base_score += (combo_size - 3) * 20
 	return base_score * chain
 
-func _garbage_power_for(combo_size: int, chain: int) -> int:
-	if chain >= 2:
-		var height: int = min(chain - 1, 12)
-		return 6 * height
-	if combo_size >= 4:
-		return min(combo_size - 1, 6)
-	return 0
-
-func _garbage_shape_for_power(power: int) -> Dictionary:
-	if power <= 0:
-		return {"height": 0, "width": 0}
-	if power <= GRID_WIDTH:
-		return {"height": 1, "width": power}
-	var height: int = int(ceil(power / float(GRID_WIDTH)))
-	height = min(height, MAX_GARBAGE_HEIGHT)
-	return {"height": height, "width": GRID_WIDTH}
+func _garbage_combo_pieces(combo_size: int) -> Array:
+	if combo_size < 4:
+		return []
+	var w: int = combo_size - 1
+	var num_pieces: int = int(ceil(w / float(GRID_WIDTH)))
+	var base: int = w / num_pieces
+	var remainder: int = w % num_pieces
+	var pieces := []
+	for i in range(num_pieces):
+		var piece_w: int = base + (1 if i < remainder else 0)
+		pieces.append({"w": piece_w, "h": 1})
+	return pieces
 
 func _generate_row(row_index: int) -> Array:
 	var row_colors := []

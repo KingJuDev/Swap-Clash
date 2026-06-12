@@ -27,15 +27,17 @@ func _process(_delta: float) -> bool:
 	var b: Variant = board._spawn_block(0, 5, 2)
 	board.grid[5][2] = b
 
-	board._apply_gravity()
+	var delta := 1.0 / 60.0
+	for i in range(300):
+		board._advance_simulation(delta)
 
 	# Garbage falls to the floor (row 11).
-	assert(g.origin == Vector2i(2, 11))
-	assert(board.grid[11][2] == g and board.grid[11][3] == g)
+	assert(g.origin == Vector2i(2, board.VISIBLE_ROWS - 1))
+	assert(board.grid[board.VISIBLE_ROWS - 1][2] == g and board.grid[board.VISIBLE_ROWS - 1][3] == g)
 
 	# The block above falls to rest just above the garbage (row 10).
-	assert(b.grid_pos == Vector2i(2, 10))
-	assert(board.grid[10][2] == b)
+	assert(b.grid_pos == Vector2i(2, board.VISIBLE_ROWS - 2))
+	assert(board.grid[board.VISIBLE_ROWS - 2][2] == b)
 
 	print("ALL TESTS PASSED")
 	quit()

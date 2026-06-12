@@ -38,8 +38,8 @@ func _ready() -> void:
 	end_panel.visible = false
 
 func _process(_delta: float) -> void:
-	garbage_label1.text = "Garbage entrant: %d" % board1.pending_garbage.size()
-	garbage_label2.text = "Garbage entrant: %d" % board2.pending_garbage.size()
+	garbage_label1.text = "Garbage entrant: %d" % board1.incoming_garbage.size()
+	garbage_label2.text = "Garbage entrant: %d" % board2.incoming_garbage.size()
 
 func _on_game_over(winner: int) -> void:
 	board1.set_process(false)
