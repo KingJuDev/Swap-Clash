@@ -379,6 +379,65 @@ func _update_blocks(delta: float) -> void:
 						grid[row][col] = null
 						b.queue_free()
 
+func _check_garbage_floating(g: GarbageBlock) -> void:
+	var bottom_row := g.origin.y + g.height - 1
+	if bottom_row >= VISIBLE_ROWS - 1:
+		return
+	for col in range(g.origin.x, g.origin.x + g.width):
+		if grid[bottom_row + 1][col] == null:
+			g.state = GarbageBlock.State.FLOATING
+			g.float_timer = FLOAT_DELAY
+			return
+
+func _update_falling_garbage(g: GarbageBlock, delta: float) -> void:
+	g.position.y += FALL_SPEED * delta
+	while true:
+		var bottom_row := g.origin.y + g.height - 1
+		var next_row := bottom_row + 1
+		var blocked := next_row >= VISIBLE_ROWS
+		if not blocked:
+			for col in range(g.origin.x, g.origin.x + g.width):
+				if grid[next_row][col] != null:
+					blocked = true
+					break
+		if blocked:
+			var floor_y: float = g.origin.y * CELL_SIZE - rise_offset
+			if g.position.y >= floor_y:
+				g.position.y = floor_y
+				g.state = GarbageBlock.State.IDLE
+			break
+		var next_y: float = (g.origin.y + 1) * CELL_SIZE - rise_offset
+		if g.position.y >= next_y:
+			for col in range(g.origin.x, g.origin.x + g.width):
+				for row in range(g.origin.y, g.origin.y + g.height):
+					grid[row][col] = null
+			g.origin.y += 1
+			for col in range(g.origin.x, g.origin.x + g.width):
+				for row in range(g.origin.y, g.origin.y + g.height):
+					grid[row][col] = g
+		else:
+			break
+
+func _update_garbage_blocks(delta: float) -> void:
+	var processed := {}
+	for row in range(VISIBLE_ROWS - 1, -1, -1):
+		for col in range(GRID_WIDTH):
+			var g: Variant = grid[row][col]
+			if not (g is GarbageBlock) or processed.has(g):
+				continue
+			processed[g] = true
+			match g.state:
+				GarbageBlock.State.IDLE:
+					_check_garbage_floating(g)
+				GarbageBlock.State.FLOATING:
+					g.float_timer -= delta
+					if g.float_timer <= 0.0:
+						g.state = GarbageBlock.State.FALLING
+				GarbageBlock.State.FALLING:
+					_update_falling_garbage(g, delta)
+				GarbageBlock.State.FLASHING:
+					pass
+
 func _apply_gravity() -> void:
 	var start_pos := {}
 	var any_moved := true
