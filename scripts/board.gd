@@ -30,6 +30,11 @@ const STOP_MAX := 6.0
 const DANGER_ZONE_ROWS := 1
 const DANGER_ZONE_STOP_MULTIPLIER := 2.0
 
+# How long the top row may stay occupied before the board tops out. This is the
+# real loss condition: blocks/garbage can fill the board (garbage spawns from the
+# top) without ever triggering a rise step, so we top out on a grace timer too.
+const TOP_OUT_GRACE := 1.0
+
 const RISE_SPEED_NORMAL := 6.0
 const RISE_SPEED_FAST := 60.0
 const MOVE_REPEAT_DELAY := 0.25
@@ -91,6 +96,7 @@ var grid: Array = []
 var cursor_pos := Vector2i(GRID_WIDTH / 2 - 1, VISIBLE_ROWS - 1)
 var rise_offset := 0.0
 var _danger_pulse_t := 0.0
+var _top_out_timer := 0.0
 var score := 0
 var chain_count := 0
 var chain_max := 0
@@ -161,8 +167,12 @@ func _process(delta: float) -> void:
 
 	if _is_in_danger_zone():
 		_danger_pulse_t += delta * DANGER_PULSE_SPEED
+		_top_out_timer += delta
+		if _top_out_timer >= TOP_OUT_GRACE:
+			_trigger_game_over()
 	else:
 		_danger_pulse_t = 0.0
+		_top_out_timer = 0.0
 	queue_redraw()
 
 func _handle_cursor_movement(delta: float) -> void:
@@ -333,9 +343,9 @@ func _end_chain() -> void:
 	var duration: float = STOP_BASE \
 		+ STOP_PER_CHAIN_LINK * (chain_max - 1) \
 		+ STOP_PER_COMBO_EXTRA * max(0, combo_max - 3)
-	duration = min(duration, STOP_MAX)
 	if _is_in_danger_zone():
 		duration *= DANGER_ZONE_STOP_MULTIPLIER
+	duration = min(duration, STOP_MAX)
 	stop_timer = max(stop_timer, duration)
 
 	chain_count = 0
@@ -398,9 +408,17 @@ func _check_block_floating(b: Block) -> void:
 	var row := b.grid_pos.y
 	if row >= VISIBLE_ROWS - 1:
 		return
-	if grid[row + 1][col] == null:
+	var below: Variant = grid[row + 1][col]
+	if below == null:
 		b.state = Block.State.FLOATING
 		b.float_timer = FLOAT_DELAY
+		b.from_chain = true
+	elif below is Block and (below.state == Block.State.FLOATING or below.state == Block.State.FALLING):
+		# The block underneath is already moving: float in sync with it so the
+		# whole column drops together instead of one block at a time. _update_blocks
+		# runs bottom-to-top, so `below` has already transitioned this frame.
+		b.state = Block.State.FLOATING
+		b.float_timer = below.float_timer
 		b.from_chain = true
 
 func _update_falling_block(b: Block, delta: float) -> void:
@@ -409,7 +427,14 @@ func _update_falling_block(b: Block, delta: float) -> void:
 	b.position.y += FALL_SPEED * delta
 	while true:
 		var next_row := row + 1
-		var blocked := next_row >= VISIBLE_ROWS or grid[next_row][col] != null
+		var below: Variant = null if next_row >= VISIBLE_ROWS else grid[next_row][col]
+		# A block below that is itself moving doesn't stop us: we ride one cell
+		# above it so the column falls as a unit, and only land on a static
+		# obstacle (the floor, an idle block, or garbage).
+		if below is Block and (below.state == Block.State.FLOATING or below.state == Block.State.FALLING):
+			b.position.y = minf(b.position.y, below.position.y - CELL_SIZE)
+			break
+		var blocked := next_row >= VISIBLE_ROWS or below != null
 		if blocked:
 			var floor_y: float = row * CELL_SIZE - rise_offset
 			if b.position.y >= floor_y:
