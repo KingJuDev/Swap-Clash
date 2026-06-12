@@ -23,6 +23,13 @@ const CONVERSION_DURATION_PER_LAYER := 1.0
 const FLOAT_DELAY := 0.2
 const FALL_SPEED: float = CELL_SIZE / FALL_DURATION_PER_CELL
 
+const STOP_BASE := 0.5
+const STOP_PER_CHAIN_LINK := 0.3
+const STOP_PER_COMBO_EXTRA := 0.1
+const STOP_MAX := 5.0
+const DANGER_ZONE_ROWS := 1
+const DANGER_ZONE_STOP_MULTIPLIER := 3.0
+
 const RISE_SPEED_NORMAL := 6.0
 const RISE_SPEED_FAST := 60.0
 const MOVE_REPEAT_DELAY := 0.25
@@ -75,6 +82,7 @@ var score := 0
 var chain_count := 0
 var chain_max := 0
 var combo_max := 0
+var stop_timer := 0.0
 var game_over_flag := false
 var incoming_garbage: Array = []
 var _landed_this_frame: Array = []
@@ -117,13 +125,18 @@ func _process(delta: float) -> void:
 	_advance_simulation(delta)
 
 	if _is_board_settled():
-		var rise_speed := RISE_SPEED_FAST if _is_fast_rise_pressed() else RISE_SPEED_NORMAL
-		rise_offset += rise_speed * delta
-		while rise_offset >= CELL_SIZE:
-			rise_offset -= CELL_SIZE
-			_do_rise_step()
-			if game_over_flag:
-				break
+		if stop_timer > 0.0:
+			stop_timer = max(0.0, stop_timer - delta)
+			if _is_fast_rise_pressed():
+				stop_timer = 0.0
+		else:
+			var rise_speed := RISE_SPEED_FAST if _is_fast_rise_pressed() else RISE_SPEED_NORMAL
+			rise_offset += rise_speed * delta
+			while rise_offset >= CELL_SIZE:
+				rise_offset -= CELL_SIZE
+				_do_rise_step()
+				if game_over_flag:
+					break
 
 	_update_visuals()
 
@@ -269,10 +282,25 @@ func _is_board_settled() -> bool:
 				return false
 	return _find_matches().is_empty()
 
+func _is_in_danger_zone() -> bool:
+	for row in range(DANGER_ZONE_ROWS):
+		for col in range(GRID_WIDTH):
+			if grid[row][col] != null:
+				return true
+	return false
+
 func _end_chain() -> void:
 	if chain_max >= 2:
 		var h: int = min(chain_max - 1, MAX_GARBAGE_HEIGHT)
 		garbage_sent.emit([{"w": GRID_WIDTH, "h": h}])
+
+	var duration: float = STOP_BASE \
+		+ STOP_PER_CHAIN_LINK * (chain_max - 1) \
+		+ STOP_PER_COMBO_EXTRA * max(0, combo_max - 3)
+	duration = min(duration, STOP_MAX)
+	if _is_in_danger_zone():
+		duration *= DANGER_ZONE_STOP_MULTIPLIER
+	stop_timer = max(stop_timer, duration)
 
 	chain_count = 0
 	chain_max = 0
