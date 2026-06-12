@@ -37,6 +37,8 @@ const MOVE_REPEAT_RATE := 0.06
 const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1
 
 const BOARD_FRAME_COLOR := Color(0.3, 0.7, 1.0)
+const DANGER_FRAME_COLOR := Color(1.0, 0.15, 0.15)
+const DANGER_PULSE_SPEED := 6.0
 
 const SHAKE_CHAIN_THRESHOLD := 3
 const SHAKE_COMBO_THRESHOLD := 5
@@ -78,6 +80,7 @@ var grid: Array = []
 # cursor_pos.x = left column of the 2-wide cursor, cursor_pos.y = row.
 var cursor_pos := Vector2i(GRID_WIDTH / 2 - 1, VISIBLE_ROWS - 1)
 var rise_offset := 0.0
+var _danger_pulse_t := 0.0
 var score := 0
 var chain_count := 0
 var chain_max := 0
@@ -109,7 +112,11 @@ func _ready() -> void:
 
 func _draw() -> void:
 	var rect := Rect2(Vector2.ZERO, Vector2(GRID_WIDTH * CELL_SIZE, VISIBLE_ROWS * CELL_SIZE))
-	NeonTheme.draw_glow_rect_outline(self, rect, BOARD_FRAME_COLOR, 4, 3.0)
+	var frame_color := BOARD_FRAME_COLOR
+	if _is_in_danger_zone():
+		var pulse := (sin(_danger_pulse_t) + 1.0) / 2.0
+		frame_color = BOARD_FRAME_COLOR.lerp(DANGER_FRAME_COLOR, pulse)
+	NeonTheme.draw_glow_rect_outline(self, rect, frame_color, 4, 3.0)
 
 func _process(delta: float) -> void:
 	if game_over_flag:
@@ -139,6 +146,12 @@ func _process(delta: float) -> void:
 					break
 
 	_update_visuals()
+
+	if _is_in_danger_zone():
+		_danger_pulse_t += delta * DANGER_PULSE_SPEED
+	else:
+		_danger_pulse_t = 0.0
+	queue_redraw()
 
 func _handle_cursor_movement(delta: float) -> void:
 	var dirs := {
