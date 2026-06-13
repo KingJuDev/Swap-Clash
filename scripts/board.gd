@@ -307,7 +307,8 @@ func _check_matches() -> void:
 			if n.x < 0 or n.x >= GRID_WIDTH or n.y < 0 or n.y >= VISIBLE_ROWS:
 				continue
 			var cell: Variant = grid[n.y][n.x]
-			if cell is GarbageBlock and cell.state == GarbageBlock.State.IDLE:
+			# Convert any adjacent garbage that isn't already mid-conversion.
+			if cell is GarbageBlock and cell.state != GarbageBlock.State.FLASHING:
 				to_shatter[cell] = true
 
 	for pos in matches:
@@ -316,7 +317,7 @@ func _check_matches() -> void:
 		b.play_match_flash()
 
 	for g in to_shatter.keys():
-		_convert_garbage_block(g)
+		_start_garbage_conversion(g)
 
 func _is_board_settled() -> bool:
 	for row in range(VISIBLE_ROWS):
@@ -379,29 +380,32 @@ func _update_incoming_garbage() -> void:
 	g.float_timer = FLOAT_DELAY
 	incoming_garbage.remove_at(0)
 
-func _convert_garbage_block(g: GarbageBlock) -> void:
+# Begins a garbage block's conversion. The actual row-by-row shatter is driven
+# deterministically each frame in _update_garbage_blocks (FLASHING case), so a
+# converting garbage can never dead-end and freeze the board.
+func _start_garbage_conversion(g: GarbageBlock) -> void:
 	g.state = GarbageBlock.State.FLASHING
+	g.convert_timer = CONVERSION_FLASH_DURATION
 	g.play_match_flash()
-	await get_tree().create_timer(CONVERSION_FLASH_DURATION).timeout
-	while g.height > 0:
-		var bottom_row := g.origin.y + g.height - 1
-		for col in range(g.origin.x, g.origin.x + g.width):
-			var b := _spawn_block(randi() % NUM_COLORS, bottom_row, col)
-			b.state = Block.State.FLOATING
-			b.from_chain = true
-			b.float_timer = FLOAT_DELAY
-			grid[bottom_row][col] = b
-		g.play_shatter_row(g.height - 1, CELL_SIZE)
-		g.height -= 1
-		var fully_converted := g.height <= 0
-		if fully_converted:
-			g.queue_free()
-		else:
-			g.shrink_to(g.height, CELL_SIZE)
-			g.state = GarbageBlock.State.FLASHING
-		await get_tree().create_timer(CONVERSION_DURATION_PER_LAYER).timeout
-		if fully_converted:
-			break
+
+# Converts the bottom row of a FLASHING garbage into floating blocks and shrinks
+# the garbage by one row. Frees it once fully converted.
+func _convert_one_garbage_row(g: GarbageBlock) -> void:
+	var bottom_row := g.origin.y + g.height - 1
+	for col in range(g.origin.x, g.origin.x + g.width):
+		var b := _spawn_block(randi() % NUM_COLORS, bottom_row, col)
+		b.state = Block.State.FLOATING
+		b.from_chain = true
+		b.float_timer = FLOAT_DELAY
+		grid[bottom_row][col] = b
+	g.play_shatter_row(g.height - 1, CELL_SIZE)
+	g.height -= 1
+	if g.height <= 0:
+		g.queue_free()
+	else:
+		g.shrink_to(g.height, CELL_SIZE)
+		g.state = GarbageBlock.State.FLASHING
+		g.convert_timer = CONVERSION_DURATION_PER_LAYER
 
 func _check_block_floating(b: Block) -> void:
 	var col := b.grid_pos.x
@@ -537,7 +541,9 @@ func _update_garbage_blocks(delta: float) -> void:
 				GarbageBlock.State.FALLING:
 					_update_falling_garbage(g, delta)
 				GarbageBlock.State.FLASHING:
-					pass
+					g.convert_timer -= delta
+					if g.convert_timer <= 0.0:
+						_convert_one_garbage_row(g)
 
 func _find_matches() -> Array:
 	var matched := {}
