@@ -5,13 +5,20 @@ extends RefCounted
 #
 # Works on a "snapshot": a 2D array (rows x cols) where each cell is:
 #   -1  -> empty
-#   -2  -> blocked (a non-IDLE block or garbage; cannot be swapped or matched)
+#   -2  -> blocked (a non-IDLE normal block; cannot be swapped or matched)
+#   -3  -> garbage (immovable; shatters when a match is made next to it)
 #   >=0 -> the color id of an IDLE block
 #
 # All functions are static so they can be unit-tested without a live Board.
 
 const EMPTY := -1
 const BLOCKED := -2
+const GARBAGE := -3
+
+# A match made orthogonally next to garbage shatters it — the key way to clear
+# garbage. Strongly reward such matches so the AI digs itself out instead of
+# drowning under garbage it never breaks.
+const GARBAGE_CLEAR_BONUS := 5000
 
 # Difficulty presets: how often the AI re-plans, how fast it taps the cursor,
 # and how often it deliberately picks a worse move. Tuning values.
@@ -43,10 +50,12 @@ static func best_swap(snapshot: Array) -> Dictionary:
 			if not _swappable(a) or not _swappable(b) or a == b:
 				continue
 			var sim := _swapped(snapshot, r, c)
-			var matched := _count_matched(sim)
+			var matched := _matched_cells(sim)
 			var score: int
-			if matched > 0:
-				score = 1000 + 100 * matched
+			if not matched.is_empty():
+				score = 1000 + 100 * matched.size()
+				if _match_touches_garbage(sim, matched):
+					score += GARBAGE_CLEAR_BONUS
 			else:
 				score = (_adjacency(sim) - base_adjacency) * 10
 			if score > best_score:
@@ -152,6 +161,7 @@ static func best_swap_chain(snapshot: Array) -> Dictionary:
 			if outcome["chain"] >= 1:
 				var combo_bonus: int = max(0, outcome["combo"] - 3) * 300
 				score = 1000 + (outcome["chain"] - 1) * 5000 + combo_bonus + outcome["cleared"] * 50
+				score += outcome["garbage"] * GARBAGE_CLEAR_BONUS
 			else:
 				var quality := _adjacency(sim) + _vertical_bias(sim)
 				score = (quality - base_quality) * 10
@@ -161,13 +171,15 @@ static func best_swap_chain(snapshot: Array) -> Dictionary:
 	return best
 
 # Simulates a swap then resolves the full cascade (gravity + repeated matches).
-# Returns { "chain": links, "cleared": total cells removed, "combo": biggest single clear }.
+# Returns { "chain", "cleared", "combo", "garbage" } where garbage is how many
+# garbage cells get shattered (matches made next to them) across the cascade.
 static func simulate_swap(snapshot: Array, r: int, c: int) -> Dictionary:
 	var grid := _swapped(snapshot, r, c)
 	_apply_gravity(grid)
 	var chain := 0
 	var cleared := 0
 	var combo := 0
+	var garbage := 0
 	while true:
 		var matched := _matched_cells(grid)
 		if matched.is_empty():
@@ -175,13 +187,14 @@ static func simulate_swap(snapshot: Array, r: int, c: int) -> Dictionary:
 		chain += 1
 		cleared += matched.size()
 		combo = max(combo, matched.size())
+		garbage += _count_garbage_adjacent(grid, matched)
 		for pos in matched.keys():
 			grid[pos.y][pos.x] = EMPTY
 		_apply_gravity(grid)
-	return {"chain": chain, "cleared": cleared, "combo": combo}
+	return {"chain": chain, "cleared": cleared, "combo": combo, "garbage": garbage}
 
-# Drops color blocks down within each column. BLOCKED cells are immovable and
-# split the column into independent free segments.
+# Drops color blocks down within each column. BLOCKED and GARBAGE cells are
+# immovable and split the column into independent free segments.
 static func _apply_gravity(grid: Array) -> void:
 	var rows := grid.size()
 	var cols: int = grid[0].size()
@@ -189,7 +202,7 @@ static func _apply_gravity(grid: Array) -> void:
 		var seg_bottom := rows - 1
 		var r := rows - 1
 		while r >= -1:
-			if r == -1 or grid[r][c] == BLOCKED:
+			if r == -1 or grid[r][c] == BLOCKED or grid[r][c] == GARBAGE:
 				# Compact the free segment (r, seg_bottom] toward seg_bottom.
 				var write := seg_bottom
 				var read := seg_bottom
@@ -217,3 +230,24 @@ static func _vertical_bias(snapshot: Array) -> int:
 			if color >= 0 and snapshot[r + 1][c] == color:
 				count += 1
 	return count
+
+const _NEIGHBORS := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
+
+# Whether any matched cell is orthogonally adjacent to a garbage cell (which it
+# would shatter in the real game).
+static func _match_touches_garbage(grid: Array, matched: Dictionary) -> bool:
+	return _count_garbage_adjacent(grid, matched) > 0
+
+# Count of distinct garbage cells orthogonally adjacent to the matched cells.
+static func _count_garbage_adjacent(grid: Array, matched: Dictionary) -> int:
+	var rows := grid.size()
+	var cols: int = grid[0].size()
+	var found := {}
+	for pos in matched.keys():
+		for d in _NEIGHBORS:
+			var n: Vector2i = pos + d
+			if n.x < 0 or n.x >= cols or n.y < 0 or n.y >= rows:
+				continue
+			if grid[n.y][n.x] == GARBAGE:
+				found[n] = true
+	return found.size()

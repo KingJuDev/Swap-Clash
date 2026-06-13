@@ -67,6 +67,8 @@ func _snapshot(board: Object) -> Array:
 				cells.append(cell.color_id)
 			elif cell == null:
 				cells.append(AIBrain.EMPTY)
+			elif cell is GarbageBlock:
+				cells.append(AIBrain.GARBAGE)
 			else:
 				cells.append(AIBrain.BLOCKED)
 		snapshot.append(cells)
