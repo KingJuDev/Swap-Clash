@@ -13,6 +13,8 @@ var height: int = 1
 var origin: Vector2i = Vector2i.ZERO
 var state: State = State.IDLE
 var float_timer: float = 0.0
+# Counts down while FLASHING; drives deterministic row-by-row conversion.
+var convert_timer: float = 0.0
 
 var _cell_size: int = 64
 
