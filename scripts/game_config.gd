@@ -43,6 +43,24 @@ var cpu_difficulty: String = "moyen"
 func _ready() -> void:
 	load_settings()
 	apply_display()
+	_ensure_ui_gamepad_bindings()
+
+# Godot 4.6's default ui_accept/ui_cancel actions have no gamepad buttons (only
+# the directional ui_* actions do). Append A -> validate and B -> back so menus
+# are fully navigable with a controller, without disturbing the keyboard events.
+func _ensure_ui_gamepad_bindings() -> void:
+	_add_joy_button("ui_accept", JOY_BUTTON_A)
+	_add_joy_button("ui_cancel", JOY_BUTTON_B)
+
+func _add_joy_button(action: String, button: int) -> void:
+	if not InputMap.has_action(action):
+		return
+	for ev in InputMap.action_get_events(action):
+		if ev is InputEventJoypadButton and ev.button_index == button:
+			return
+	var event := InputEventJoypadButton.new()
+	event.button_index = button
+	InputMap.action_add_event(action, event)
 
 func default_keys(player: int) -> Dictionary:
 	return (DEFAULT_KEYS_1 if player == 1 else DEFAULT_KEYS_2).duplicate()
