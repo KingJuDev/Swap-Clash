@@ -14,6 +14,10 @@ func _ready() -> void:
 	game_over_panel.visible = false
 	chain_label.text = ""
 
+	var music := get_node_or_null("/root/MusicPlayer")
+	if music != null:
+		music.play_battle()
+
 func _on_score_changed(new_score: int) -> void:
 	score_label.text = "Score: %d" % new_score
 

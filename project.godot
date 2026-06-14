@@ -27,6 +27,7 @@ window/stretch/aspect="keep"
 
 GameConfig="*res://scripts/game_config.gd"
 PauseMenu="*res://scenes/PauseMenu.tscn"
+MusicPlayer="*res://scripts/music_player.gd"
 
 [input]
 
