@@ -18,4 +18,4 @@ func _start(difficulty: String) -> void:
 	config.vs_cpu = true
 	config.cpu_difficulty = difficulty
 	config.save_settings()
-	get_tree().change_scene_to_file("res://scenes/Match.tscn")
+	get_tree().change_scene_to_file("res://scenes/SpeedSelect.tscn")

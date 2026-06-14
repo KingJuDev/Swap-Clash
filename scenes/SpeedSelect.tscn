@@ -1,0 +1,82 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/speed_select.gd" id="1"]
+[ext_resource type="Theme" path="res://resources/theme/neon_theme.tres" id="2"]
+[ext_resource type="Script" path="res://scripts/menu_background.gd" id="3"]
+[ext_resource type="Script" path="res://scripts/menu_nav.gd" id="4"]
+
+[node name="SpeedSelect" type="Node2D"]
+script = ExtResource("1")
+theme = ExtResource("2")
+
+[node name="Background" type="ColorRect" parent="."]
+offset_right = 920.0
+offset_bottom = 800.0
+mouse_filter = 2
+script = ExtResource("3")
+
+[node name="TitleLabel" type="Label" parent="."]
+offset_left = 160.0
+offset_top = 150.0
+offset_right = 760.0
+offset_bottom = 210.0
+theme_override_font_sizes/font_size = 36
+horizontal_alignment = 1
+text = "Vitesse de montée"
+
+[node name="MinusButton" type="Button" parent="."]
+focus_mode = 0
+offset_left = 330.0
+offset_top = 295.0
+offset_right = 395.0
+offset_bottom = 365.0
+theme_override_font_sizes/font_size = 32
+text = "◀"
+
+[node name="ValueLabel" type="Label" parent="."]
+offset_left = 410.0
+offset_top = 295.0
+offset_right = 510.0
+offset_bottom = 365.0
+theme_override_font_sizes/font_size = 48
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "5"
+
+[node name="PlusButton" type="Button" parent="."]
+focus_mode = 0
+offset_left = 525.0
+offset_top = 295.0
+offset_right = 590.0
+offset_bottom = 365.0
+theme_override_font_sizes/font_size = 32
+text = "▶"
+
+[node name="HintLabel" type="Label" parent="."]
+offset_left = 160.0
+offset_top = 375.0
+offset_right = 760.0
+offset_bottom = 405.0
+theme_override_font_sizes/font_size = 18
+horizontal_alignment = 1
+text = "◀ ▶ : régler la vitesse"
+
+[node name="StartButton" type="Button" parent="."]
+offset_left = 310.0
+offset_top = 460.0
+offset_right = 610.0
+offset_bottom = 510.0
+theme_override_font_sizes/font_size = 24
+text = "Démarrer"
+
+[node name="BackButton" type="Button" parent="."]
+offset_left = 310.0
+offset_top = 540.0
+offset_right = 610.0
+offset_bottom = 590.0
+theme_override_font_sizes/font_size = 24
+text = "Retour"
+
+[node name="MenuNav" type="Node" parent="."]
+script = ExtResource("4")
+vertical_only = true

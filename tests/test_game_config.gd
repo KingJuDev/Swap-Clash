@@ -24,5 +24,10 @@ func _initialize() -> void:
 	assert(game_config.player1_source == game_config.SOURCE_GAMEPAD)
 	assert(game_config.player1_device == 1)
 
+	# Rise speed level defaults to 5 and is settable.
+	assert(game_config.rise_level == 5)
+	game_config.rise_level = 7
+	assert(game_config.rise_level == 7)
+
 	print("ALL TESTS PASSED")
 	quit()

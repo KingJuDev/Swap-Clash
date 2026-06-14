@@ -12,4 +12,4 @@ func _ready() -> void:
 func _on_versus_pressed() -> void:
 	var config: Node = get_node("/root/GameConfig")
 	config.vs_cpu = false
-	get_tree().change_scene_to_file("res://scenes/Match.tscn")
+	get_tree().change_scene_to_file("res://scenes/SpeedSelect.tscn")

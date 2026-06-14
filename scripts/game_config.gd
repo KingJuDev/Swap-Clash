@@ -40,6 +40,9 @@ var fullscreen: bool = false
 var vs_cpu: bool = false
 var cpu_difficulty: String = "moyen"
 
+# Block rise speed level (1-9), chosen before a match. Saved preference.
+var rise_level: int = 5
+
 func _ready() -> void:
 	load_settings()
 	apply_display()
@@ -83,6 +86,7 @@ func save_settings() -> void:
 	cfg.set_value("display", "resolution_y", resolution.y)
 	cfg.set_value("display", "fullscreen", fullscreen)
 	cfg.set_value("game", "cpu_difficulty", cpu_difficulty)
+	cfg.set_value("game", "rise_level", rise_level)
 	cfg.set_value("input", "player1_source", player1_source)
 	cfg.set_value("input", "player1_device", player1_device)
 	cfg.set_value("input", "player2_source", player2_source)
@@ -101,6 +105,7 @@ func load_settings() -> void:
 	)
 	fullscreen = cfg.get_value("display", "fullscreen", fullscreen)
 	cpu_difficulty = cfg.get_value("game", "cpu_difficulty", cpu_difficulty)
+	rise_level = cfg.get_value("game", "rise_level", rise_level)
 	player1_source = cfg.get_value("input", "player1_source", player1_source)
 	player1_device = cfg.get_value("input", "player1_device", player1_device)
 	player2_source = cfg.get_value("input", "player2_source", player2_source)

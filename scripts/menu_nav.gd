@@ -14,6 +14,10 @@ const ANIM_TIME := 0.12
 ## Optional explicit starting focus. Defaults to the first focusable button.
 @export var default_focus: NodePath
 
+## When true, only wire up/down focus neighbors (leaves left/right free, e.g. for
+## a value stepper that reads ui_left/ui_right itself).
+@export var vertical_only: bool = false
+
 var _buttons: Array[Button] = []
 var _back_button: Button = null
 var _tweens: Dictionary = {}
@@ -45,9 +49,10 @@ func _wire_focus_neighbors() -> void:
 		var next := _buttons[(i + 1) % count].get_path()
 		var button := _buttons[i]
 		button.focus_neighbor_top = prev
-		button.focus_neighbor_left = prev
 		button.focus_neighbor_bottom = next
-		button.focus_neighbor_right = next
+		if not vertical_only:
+			button.focus_neighbor_left = prev
+			button.focus_neighbor_right = next
 
 ## Gives focus to the first visible, enabled button. Safe to call repeatedly
 ## (e.g. when a popup re-shows with a different set of visible buttons).
@@ -64,7 +69,8 @@ func refresh() -> void:
 
 func _collect_buttons(node: Node) -> void:
 	for child in node.get_children():
-		if child is Button:
+		# Skip non-focusable buttons (e.g. mouse-only stepper arrows).
+		if child is Button and child.focus_mode != Control.FOCUS_NONE:
 			_buttons.append(child)
 		_collect_buttons(child)
 

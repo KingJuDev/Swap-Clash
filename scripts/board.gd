@@ -35,8 +35,12 @@ const DANGER_ZONE_STOP_MULTIPLIER := 2.0
 # top) without ever triggering a rise step, so we top out on a grace timer too.
 const TOP_OUT_GRACE := 1.0
 
-const RISE_SPEED_NORMAL := 6.0
+const RISE_SPEED_NORMAL := 6.0 # fallback / rise level 5
 const RISE_SPEED_FAST := 60.0
+# Rise speed (px/s) per chosen level 1-9: BASE + (level-1)*STEP.
+# Level 1 = 2.0 (slow) ... level 5 = 6.0 (= old default) ... level 9 = 10.0.
+const RISE_SPEED_BASE := 2.0
+const RISE_SPEED_STEP := 1.0
 const MOVE_REPEAT_DELAY := 0.25
 const MOVE_REPEAT_RATE := 0.06
 const MAX_GARBAGE_HEIGHT := VISIBLE_ROWS - 1
@@ -109,10 +113,15 @@ var _landed_this_frame: Array = []
 var _swap_was_pressed := false
 var _key_held_time := {}
 var _base_position := Vector2.ZERO
+var _rise_speed_normal: float = RISE_SPEED_NORMAL
 
 func _ready() -> void:
 	randomize()
 	_base_position = position
+	var config := get_node_or_null("/root/GameConfig")
+	if config != null:
+		var level: int = clampi(config.rise_level, 1, 9)
+		_rise_speed_normal = RISE_SPEED_BASE + (level - 1) * RISE_SPEED_STEP
 	for row in range(TOTAL_ROWS):
 		var cells := []
 		for col in range(GRID_WIDTH):
@@ -155,7 +164,7 @@ func _process(delta: float) -> void:
 			if _is_fast_rise_pressed():
 				stop_timer = 0.0
 		else:
-			var rise_speed := RISE_SPEED_FAST if _is_fast_rise_pressed() else RISE_SPEED_NORMAL
+			var rise_speed := RISE_SPEED_FAST if _is_fast_rise_pressed() else _rise_speed_normal
 			rise_offset += rise_speed * delta
 			while rise_offset >= CELL_SIZE:
 				rise_offset -= CELL_SIZE
