@@ -44,6 +44,10 @@ func _ready() -> void:
 	restart_button.pressed.connect(func(): get_tree().reload_current_scene())
 	end_panel.visible = false
 
+	var music := get_node_or_null("/root/MusicPlayer")
+	if music != null:
+		music.play_battle()
+
 func _process(_delta: float) -> void:
 	garbage_label1.text = "Garbage entrant: %d" % board1.incoming_garbage.size()
 	garbage_label2.text = "Garbage entrant: %d" % board2.incoming_garbage.size()

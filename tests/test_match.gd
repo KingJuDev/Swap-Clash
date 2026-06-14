@@ -3,20 +3,25 @@ extends SceneTree
 const MatchScene := preload("res://scenes/Match.tscn")
 
 var _match: Variant = null
-
-func _initialize() -> void:
-	var config: Variant = get_root().get_node("GameConfig")
-	config.player1_source = config.SOURCE_KEYBOARD
-	config.player1_device = 0
-	config.player2_source = config.SOURCE_KEYBOARD
-	config.player2_device = 0
-
-	_match = MatchScene.instantiate()
-	get_root().add_child(_match)
+var _setup := false
 
 func _process(_delta: float) -> bool:
-	var m: Variant = _match
 	var config: Variant = get_root().get_node("GameConfig")
+
+	if not _setup:
+		# Configure inputs AFTER autoloads' _ready (GameConfig.load_settings runs
+		# there) so the saved settings.cfg can't override these test values, then
+		# instantiate the match so its _ready reads them.
+		config.player1_source = config.SOURCE_KEYBOARD
+		config.player1_device = 0
+		config.player2_source = config.SOURCE_KEYBOARD
+		config.player2_device = 0
+		_match = MatchScene.instantiate()
+		get_root().add_child(_match)
+		_setup = true
+		return false
+
+	var m: Variant = _match
 
 	# No waiting screen: both boards start processing immediately.
 	assert(m.has_node("WaitingPanel") == false)
